@@ -27,14 +27,18 @@ kopija.
 3. Pārējie ievada savu vārdu, host adresi un istabas kodu, tad spiež
    "Join game".
 4. Multiplayer izvēlnē ir redzami spēles noteikumi. Kad visi pievienojušies,
-   katrs uzzīmē sākuma figūru savā laukumā, tad hosts spiež "Start game".
-5. Spēlētāji pēc kārtas izdara vienu gājienu: zīmē savā laukumā, lai
-   aizsargātos, vai pretinieka laukumā (sarkanā), lai uzbruktu. 2v2 režīmā
-   komandas biedriem uzbrukt nedrīkst.
-6. Pēc visiem gājieniem spēle izpilda 10 Game of Life paaudzes. Spēlētājs
+   katrs savā laukumā var uzzīmēt līdz 20 rūtiņām, tad hosts spiež "Start game".
+5. Katrā kārtā visi spēlētāji zīmē vienlaikus 15 sekundes. Katrs var izvietot
+   līdz 6 rūtiņām ar klikšķiem vai vilkšanu, arī atsevišķi, un spiež
+   "Pabeigt gājienu". Kad visi iesnieguši vai laiks beidzies, zīmējumi tiek
+   izspēlēti. Savā laukumā var aizsargāties, bet pretinieka laukumā (sarkanā)
+   uzbrukt. 2v2 režīmā komandas biedriem uzbrukt nedrīkst.
+6. Pēc kārtas spēle izpilda 10 Game of Life paaudzes. Spēlētājs
    tiek izslēgts, ja viņa sākuma laukumā vairs nav dzīvu šūnu. Uzvar pēdējais
    izdzīvojušais spēlētājs vai komanda; spēles beigās parādās uzvaras ekrāns
    ar tekstu "KONČA NO ZANES!".
+7. Multiplayer spēle ilgst ne vairāk kā 15 minūtes. Ja kopējais laiks beidzas,
+   pirms palikusi tikai viena komanda, spēle beidzas neizšķirti.
 
 Ja Windows Firewall jautā, atļauj Python piekļuvi Private networks
 privātajam tīklam. Atļauju dod tikai uzticamā tīklā un kopīgo istabas kodu
