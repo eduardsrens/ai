@@ -6,7 +6,13 @@ import tkinter as tk
 from tkinter import colorchooser, messagebox
 from tkinter import ttk
 
-from multiplayer_game import GameClient, GameServer, local_ipv4_address
+from multiplayer_game import (
+    MAX_SETUP_CELLS,
+    MAX_TURN_CELLS,
+    GameClient,
+    GameServer,
+    local_ipv4_address,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -176,13 +182,19 @@ class GameOfLife:
             "1. Izvēlies 1v1 vai 2v2. Host izveido spēli, bet pārējie pievienojas "
             "ar host adresi un istabas kodu (visi vienā Wi-Fi/LAN tīklā).\n"
             "2. Kad visi pievienojušies, katrs uzzīmē sākuma figūru savā laukumā. "
-            "Spēli sāk hosts.\n"
-            "3. Savā gājienā uzzīmē vienu līniju: savā laukumā, lai aizsargātos, "
+            "Katram ir atļauts ne vairāk kā 20 rūtiņu. Spēli sāk hosts.\n"
+            "3. Visi spēlētāji zīmē vienlaikus. 15 sekunžu laikā katrs var uzzīmēt "
+            "līdz 6 rūtiņām: savā laukumā, lai aizsargātos, "
             "vai pretinieka laukumā, lai uzbruktu (uzbrukums ir sarkanā krāsā). "
-            "2v2 režīmā komandas biedriem uzbrukt nedrīkst.\n"
-            "4. Pēc visu spēlētāju gājieniem spēle izspēlē 10 paaudzes. Ja tavā "
+            "Rūtiņas vari pievienot ar vairākiem klikšķiem vai vilkšanu un "
+            "spied “Pabeigt gājienu”. Ja laiks beidzas, iesniegtie zīmējumi tiek "
+            "izspēlēti. 2v2 režīmā komandas biedriem uzbrukt "
+            "nedrīkst.\n"
+            "4. Kad visi iesnieguši gājienus vai pagājušas 15 sekundes, spēle "
+            "izspēlē 10 paaudzes. Ja tavā "
             "sākuma laukumā vairs nav dzīvu šūnu, tu esi izsists. Uzvar pēdējais "
-            "izdzīvojušais spēlētājs vai komanda."
+            "izdzīvojušais spēlētājs vai komanda. Spēle ilgst ne vairāk kā "
+            "15 minūtes; ja laiks beidzas, rezultāts ir neizšķirts."
         )
         ttk.Label(
             multiplayer_content,
@@ -279,12 +291,20 @@ class GameOfLife:
             command=self._start_multiplayer_game,
         )
         self.mp_start_button.grid(row=0, column=0, padx=(0, 8))
+        self.mp_submit_turn_button = ttk.Button(
+            mp_controls,
+            text="Pabeigt gājienu",
+            style="Game.TButton",
+            command=self._submit_multiplayer_turn,
+            state="disabled",
+        )
+        self.mp_submit_turn_button.grid(row=0, column=1, padx=(0, 8))
         ttk.Label(
             mp_controls,
-            text="Setup: draw in your area. Each turn: one stroke to defend (your area) or attack (opponent area, red). After all turns, Life advances 10 generations; an empty home area means elimination.",
+            text="Sagatavošanās: līdz 20 rūtiņām savā laukumā. Katrā kārtā visi zīmē reizē 15 sekundes; izvieto līdz 6 rūtiņām, tad spied “Pabeigt gājienu”.",
             style="Hint.TLabel",
             wraplength=800,
-        ).grid(row=0, column=1, sticky="w")
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
         ttk.Button(
             mp_controls,
             text="Leave game",
@@ -686,6 +706,19 @@ class GameOfLife:
                 elif kind == "state":
                     if self.multiplayer_client is None:
                         continue
+                    previous_round = (
+                        self.multiplayer_state["round"]
+                        if self.multiplayer_state is not None
+                        else None
+                    )
+                    if (
+                        payload["phase"] != "action"
+                        or payload["round"] != previous_round
+                        or self.multiplayer_client.player_index
+                        in payload["submitted_players"]
+                    ):
+                        self.mp_stroke.clear()
+                        self.mp_last_cell = None
                     self.multiplayer_state = payload
                     self._draw_multiplayer_board()
                 elif kind == "action_done":
@@ -694,10 +727,10 @@ class GameOfLife:
                     self.multiplayer_state = payload
                     self.multiplayer_busy = False
                     self.mp_stroke.clear()
+                    self.mp_last_cell = None
                     self._draw_multiplayer_board()
                 elif kind == "action_error":
                     self.multiplayer_busy = False
-                    self.mp_stroke.clear()
                     self.mp_connection_label.configure(
                         text=f"Action failed: {payload}"
                     )
@@ -714,11 +747,12 @@ class GameOfLife:
             pass
         self.root.after(100, self._process_multiplayer_queue)
 
-    def _send_multiplayer_action(self, action, cells=None):
+    def _send_multiplayer_action(self, action, cells=None, round_number=None):
         if self.multiplayer_busy or self.multiplayer_client is None:
             return
         self.multiplayer_busy = True
         self.mp_start_button.configure(state="disabled")
+        self.mp_submit_turn_button.configure(state="disabled")
         client = self.multiplayer_client
 
         def send():
@@ -726,7 +760,7 @@ class GameOfLife:
                 if action == "start":
                     state = client.start_game()
                 else:
-                    state = client.submit_stroke(cells)
+                    state = client.submit_stroke(cells, round_number)
                 self.multiplayer_queue.put(("action_done", state))
             except (OSError, ValueError, ConnectionError) as error:
                 self.multiplayer_queue.put(("action_error", str(error)))
@@ -760,13 +794,33 @@ class GameOfLife:
         target = self._mp_territory_at(*cell)
         if state["phase"] == "setup":
             return target == player_index
-        if state["phase"] != "action" or state["current_turn"] != player_index:
+        if (
+            state["phase"] != "action"
+            or player_index in state["submitted_players"]
+        ):
             return False
         if target == player_index:
             return True
         return self._team_for_player(target, state["mode"]) != self._team_for_player(
             player_index, state["mode"]
         )
+
+    def _mp_drawing_area(self):
+        if not self.mp_stroke:
+            return None
+        return self._mp_territory_at(*next(iter(self.mp_stroke)))
+
+    def _mp_setup_cells(self):
+        state = self.multiplayer_state
+        player_index = self.multiplayer_client.player_index
+        return {
+            (x, y)
+            for x, y, _color in state["cells"]
+            if self._mp_territory_at(x, y) == player_index
+        }
+
+    def _mp_setup_cell_count(self):
+        return len(self._mp_setup_cells() | self.mp_stroke)
 
     def _mp_cell_at(self, event):
         if self.multiplayer_state is None or self.mp_cell_size <= 0:
@@ -787,12 +841,37 @@ class GameOfLife:
         state = self.multiplayer_state
         if state["phase"] == "lobby":
             return
-        if state["phase"] == "action" and state["current_turn"] != player_index:
+        if (
+            state["phase"] == "action"
+            and player_index in state["submitted_players"]
+        ):
             return
         cell = self._mp_cell_at(event)
         if cell is None or not self._mp_can_draw_cell(cell):
             return
-        self.mp_stroke = {cell}
+        if cell in self.mp_stroke:
+            self.mp_last_cell = cell
+            return
+        state = self.multiplayer_state
+        if state["phase"] == "setup":
+            if (
+                len(self._mp_setup_cells() | self.mp_stroke | {cell})
+                > MAX_SETUP_CELLS
+            ):
+                return
+            self.mp_stroke.add(cell)
+            self.mp_last_cell = cell
+            self._draw_multiplayer_board()
+            return
+        if (
+            len(self.mp_stroke) >= 6
+            or (
+                self._mp_drawing_area() is not None
+                and self._mp_territory_at(*cell) != self._mp_drawing_area()
+            )
+        ):
+            return
+        self.mp_stroke.add(cell)
         self.mp_last_cell = cell
         self._draw_multiplayer_board()
 
@@ -803,10 +882,20 @@ class GameOfLife:
         if (
             cell is None
             or cell == self.mp_last_cell
+            or cell in self.mp_stroke
             or not self._mp_can_draw_cell(cell)
-            or self._mp_territory_at(*cell)
-            != self._mp_territory_at(*next(iter(self.mp_stroke)))
-            or len(self.mp_stroke) >= 300
+            or (
+                self._mp_drawing_area() is not None
+                and self._mp_territory_at(*cell) != self._mp_drawing_area()
+            )
+            or (
+                self.multiplayer_state["phase"] == "setup"
+                and self._mp_setup_cell_count() >= MAX_SETUP_CELLS
+            )
+            or (
+                self.multiplayer_state["phase"] == "action"
+                and len(self.mp_stroke) >= MAX_TURN_CELLS
+            )
         ):
             return
         self.mp_stroke.add(cell)
@@ -816,10 +905,23 @@ class GameOfLife:
     def _multiplayer_canvas_release(self, _event):
         if not self.mp_stroke:
             return
-        cells = [[x, y] for x, y in self.mp_stroke]
-        self.mp_stroke.clear()
         self.mp_last_cell = None
-        self._send_multiplayer_action("stroke", cells)
+        if self.multiplayer_state["phase"] == "setup":
+            cells = [[x, y] for x, y in self.mp_stroke]
+            self.mp_stroke.clear()
+            self._send_multiplayer_action(
+                "stroke", cells, self.multiplayer_state["round"]
+            )
+        elif self.mp_stroke:
+            self.mp_submit_turn_button.configure(state="normal")
+
+    def _submit_multiplayer_turn(self):
+        if self.multiplayer_busy or self.multiplayer_state is None:
+            return
+        cells = [[x, y] for x, y in self.mp_stroke]
+        self._send_multiplayer_action(
+            "stroke", cells, self.multiplayer_state["round"]
+        )
 
     def _draw_multiplayer_board(self):
         if self.multiplayer_state is None or not hasattr(self, "mp_canvas"):
@@ -924,6 +1026,42 @@ class GameOfLife:
             )
 
         self.mp_status_label.configure(text=state["message"])
+        player_index = self.multiplayer_client.player_index
+        if state["phase"] == "setup":
+            setup_count = self._mp_setup_cell_count()
+            self.mp_status_label.configure(
+                text=(
+                    f"{state['message']}  "
+                    f"Starting cells: {setup_count}/{MAX_SETUP_CELLS}"
+                )
+            )
+        elif state["phase"] == "action":
+            submitted_count = len(state["submitted_players"])
+            active_count = sum(player["alive"] for player in state["players"])
+            seconds_left = state["round_time_remaining"]
+            local_status = (
+                "Gājiens iesniegts."
+                if player_index in state["submitted_players"]
+                else f"Manas rūtiņas: {len(self.mp_stroke)}/{MAX_TURN_CELLS}."
+            )
+            self.mp_status_label.configure(
+                text=f"{state['message']}  {local_status} "
+                f"Iesnieguši: {submitted_count}/{active_count}. "
+                f"Atlikušas: {seconds_left}s."
+            )
+        if state["time_remaining"] is not None:
+            minutes, seconds = divmod(state["time_remaining"], 60)
+            status_text = self.mp_status_label.cget("text")
+            self.mp_status_label.configure(
+                text=f"{status_text}  Time left: {minutes:02d}:{seconds:02d}"
+            )
+        self.mp_submit_turn_button.configure(
+            state="normal"
+            if state["phase"] == "action"
+            and player_index not in state["submitted_players"]
+            and not self.multiplayer_busy
+            else "disabled"
+        )
         if state["phase"] == "setup":
             self.mp_start_button.configure(
                 state="normal"
@@ -946,7 +1084,11 @@ class GameOfLife:
             self.mp_result_heading.configure(text="NEIZŠĶIRTS")
             self.mp_result_winner.configure(text="")
             self.mp_result_message.configure(
-                text="Šoreiz neviens neizdzīvoja. Pamēģiniet vēlreiz!"
+                text=(
+                    "Laiks beidzies! Spēle beidzās neizšķirti."
+                    if state["message"] == "Time is up. The game is a draw."
+                    else "Šoreiz neviens neizdzīvoja. Pamēģiniet vēlreiz!"
+                )
             )
         else:
             winning_players = [
