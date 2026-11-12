@@ -1,23 +1,23 @@
-#versiju vestureDzīvības spēles simulācijas kodols. 
-# Šūnu stāvokļi tiek atjaunināti pēc dzimšanas un izdzīvošanas noteikumiem. 
-# Sākuma nosacījumus var atkārtot ar fiksētu nejaušības sēklu.
-# Pielāgojami noteikumi un kaimiņu skaitīšana. 
-# Var ievadīt dzimšanas un izdzīvošanas nosacījumus, izvēlēties Moore vai Von Neumann apkaimi un ieslēgt malu savienošanu.
-# Paplašināms laukums. 
-# Ja raksti nonāk tuvu lauka malai, režģis automātiski palielinās, saglabājot šūnu pozīcijas un skatu.
-# Rakstu ievietošanas palete. 
-# Pievienoti astoņi sākuma raksti: Glider, LWSS, Blinker, Toad, Beehive, Block, R-pentomino un Acorn. 
-# Tos var ievilkt uz režģa.
-# Rakstu efekti. 
-# Rakstu ievietošanai ir “Still” un “Pulse” režīmi; pulsējošie raksti tiek periodiski pievienoti un noņemti.
-# Simulācijas vadības panelis. 
-# Var apturēt un atsākt simulāciju, veikt vienu soli, atiestatīt vai ģenerēt jaunu nejaušu sākumu.
-# Regulējami iestatījumi. 
-# Ar slīdņiem maināms simulācijas ātrums, sākotnējais šūnu blīvums un laukuma paplašināšanās rezerve.
-# Vizuālie pārskati. 
-# Saskarnē redzama paaudze, populācija, emitētāju skaits un laukuma izmēri, kā arī populācijas vēstures grafiks. 
-# Pieejamas piecas krāsu tēmas.
-# Tālummaiņa un pārvietošanās. Iekļauta peles ritenīša tālummaiņa, vilkšana, bulttaustiņi, tastatūras tālummaiņa un skata atiestatīšana.
+# Version history: Conway's Game of Life simulation core.
+# Cell states are updated according to birth and survival rules.
+# Initial conditions can be reproduced with a fixed random seed.
+# Adjustable rules and neighbor counting.
+# You can enter birth/survival rules, choose Moore or Von Neumann neighborhoods, and enable edge connectivity.
+# Expandable board.
+# When patterns approach the board edge, the grid expands automatically while preserving cell positions and view.
+# Pattern palette.
+# Eight starting patterns are included: Glider, LWSS, Blinker, Toad, Beehive, Block, R-pentomino, and Acorn.
+# They can be dragged onto the grid.
+# Pattern effects.
+# Pattern placement supports "Still" and "Pulse" modes; pulsing patterns are periodically added and removed.
+# Simulation controls.
+# You can pause and resume the simulation, step once, reset, or generate a new random start.
+# Adjustable settings.
+# Sliders control the simulation speed, starting cell density, and board expansion reserve.
+# Visual summaries.
+# The interface shows generation, population, emitter count, board size, and a population history graph.
+# Five color themes are available.
+# Zoom and navigation. Includes mouse-wheel zoom, drag panning, arrow keys, keyboard zoom, and view reset.
 
 
 

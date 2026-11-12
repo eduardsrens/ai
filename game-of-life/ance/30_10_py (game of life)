@@ -12,7 +12,7 @@ try:
     import pygame
 except ImportError as error:
     raise SystemExit(
-        "Nav atrasts pygame. Instalējiet to ar: python -m pip install pygame"
+        "pygame was not found. Install it with: python -m pip install pygame"
     ) from error
 
 
@@ -48,7 +48,7 @@ def read_drawings() -> dict[str, tuple[list[list[bool]], ColorGrid]]:
     with DRAWINGS_FILE.open(encoding="utf-8") as file:
         drawings = json.load(file)
     if not isinstance(drawings, dict):
-        raise ValueError("Saglabāto zīmējumu datnei ir nederīgs formāts.")
+        raise ValueError("The saved drawing file has an invalid format.")
 
     validated_drawings = {}
     for name, drawing in drawings.items():
@@ -69,7 +69,7 @@ def read_drawings() -> dict[str, tuple[list[list[bool]], ColorGrid]]:
                 for row in grid
             )
         ):
-            raise ValueError("Saglabāto zīmējumu datnē atrasti nederīgi dati.")
+            raise ValueError("Invalid data was found in the saved drawing file.")
         if colors is None:
             color_grid: ColorGrid = [
                 [CELL_COLOR if alive else None for alive in row] for row in grid
@@ -97,7 +97,7 @@ def read_drawings() -> dict[str, tuple[list[list[bool]], ColorGrid]]:
                 for row in colors
             )
         ):
-            raise ValueError("Saglabātajām krāsām ir nederīgs formāts.")
+            raise ValueError("The saved colors have an invalid format.")
         else:
             color_grid = [
                 [tuple(color) if color is not None else None for color in row]
@@ -108,7 +108,7 @@ def read_drawings() -> dict[str, tuple[list[list[bool]], ColorGrid]]:
             for row in range(ROWS)
             for column in range(COLUMNS)
         ):
-            raise ValueError("Dzīvajām šūnām nav norādīta krāsa.")
+            raise ValueError("Live cells are missing a color assignment.")
         validated_drawings[name] = (grid, color_grid)
     return validated_drawings
 
@@ -252,17 +252,17 @@ def draw_grid(
 
     mouse_position = pygame.mouse.get_pos()
     button_specs = (
-        ("Pauze" if running else "Palaist", "toggle"),
-        ("Solis", "step"),
-        ("Jaukt", "random"),
-        ("Tīrīt", "clear"),
-        ("Atjaunot", "reset"),
-        ("Saglabāt", "save"),
-        ("Atvērt", "load"),
-        ("Krāsa", "color"),
-        ("Lēnāk", "slower"),
-        ("Ātrāk", "faster"),
-        ("Simetr.", "symmetry"),
+        ("Pause" if running else "Start", "toggle"),
+        ("Step", "step"),
+        ("Random", "random"),
+        ("Clear", "clear"),
+        ("Reset", "reset"),
+        ("Save", "save"),
+        ("Open", "load"),
+        ("Color", "color"),
+        ("Slower", "slower"),
+        ("Faster", "faster"),
+        ("Symmetr.", "symmetry"),
     )
     buttons = []
     for index, (label, action) in enumerate(button_specs):
@@ -276,11 +276,11 @@ def draw_grid(
         buttons.append((rect, action))
 
     speed = round(1 / interval)
-    status = f"Paaudze {generation}"
+    status = f"Generation {generation}"
     screen.blit(small_font.render(status, True, TEXT_COLOR), (842, 10))
     screen.blit(
         small_font.render(
-            f"{speed} paaudzes/s  |  Space: pauze  N: solis  Esc: iziet",
+            f"{speed} generations/s  |  Space: pause  N: step  Esc: quit",
             True,
             MUTED_COLOR,
         ),
@@ -288,7 +288,7 @@ def draw_grid(
     )
     screen.blit(
         small_font.render(
-            "Velc kreiso peli: krāso  |  Labais klikšķis: dzēš",
+            "Drag left mouse: draw  |  Right click: erase",
             True,
             MUTED_COLOR,
         ),
@@ -296,7 +296,7 @@ def draw_grid(
     )
     pygame.draw.rect(screen, cell_color, (920, 47, 24, 24), border_radius=4)
     symmetry_status = (
-        "Simetrija ieslēgta" if symmetry_enabled else "Simetrija izslēgta"
+        "Symmetry enabled" if symmetry_enabled else "Symmetry disabled"
     )
     screen.blit(
         small_font.render(symmetry_status, True, MUTED_COLOR),
@@ -458,8 +458,8 @@ def main() -> None:
                                 elapsed = 0.0
                             elif action == "save":
                                 name = ask_for_drawing_name(
-                                    "Saglabāt zīmējumu",
-                                    "Ievadi zīmējuma nosaukumu:",
+                                    "Save drawing",
+                                    "Enter the drawing name:",
                                 )
                                 if name and name.strip():
                                     name = name.strip()
@@ -470,8 +470,8 @@ def main() -> None:
                                             root.withdraw()
                                             try:
                                                 overwrite = messagebox.askyesno(
-                                                    "Pārrakstīt zīmējumu?",
-                                                    f"Zīmējums “{name}” jau pastāv. Vai to pārrakstīt?",
+                                                    "Overwrite drawing?",
+                                                    f"The drawing '{name}' already exists. Overwrite it?",
                                                     parent=root,
                                                 )
                                             finally:
@@ -488,32 +488,32 @@ def main() -> None:
                                             root.withdraw()
                                             try:
                                                 messagebox.showinfo(
-                                                    "Zīmējums saglabāts",
-                                                    f"Zīmējums “{name}” ir saglabāts.",
+                                                    "Drawing saved",
+                                                    f"The drawing '{name}' was saved.",
                                                     parent=root,
                                                 )
                                             finally:
                                                 root.destroy()
                                     except (OSError, ValueError) as error:
                                         show_error(
-                                            f"Neizdevās saglabāt zīmējumu: {error}"
+                                            f"Failed to save drawing: {error}"
                                         )
                             elif action == "load":
                                 try:
                                     drawings = read_drawings()
                                     if not drawings:
-                                        show_error("Nav neviena saglabāta zīmējuma.")
+                                        show_error("There are no saved drawings.")
                                     else:
                                         names = "\n".join(sorted(drawings))
                                         name = ask_for_drawing_name(
-                                            "Ielādēt zīmējumu",
-                                            f"Saglabātie zīmējumi:\n{names}\n\nIevadi ielādējamā zīmējuma nosaukumu:",
+                                            "Load drawing",
+                                            f"Saved drawings:\n{names}\n\nEnter the drawing name to load:",
                                         )
                                         if name and name.strip():
                                             name = name.strip()
                                             if name not in drawings:
                                                 show_error(
-                                                    f"Zīmējums “{name}” nav atrasts."
+                                                    f"The drawing '{name}' was not found."
                                                 )
                                             else:
                                                 grid, colors = drawings[name]
@@ -532,7 +532,7 @@ def main() -> None:
                                                 elapsed = 0.0
                                 except (OSError, ValueError) as error:
                                     show_error(
-                                        f"Neizdevās ielādēt zīmējumus: {error}"
+                                        f"Failed to load drawings: {error}"
                                     )
                             elif action == "color":
                                 root = tk.Tk()
@@ -540,7 +540,7 @@ def main() -> None:
                                 try:
                                     rgb_color, _ = colorchooser.askcolor(
                                         color=cell_color,
-                                        title="Izvēlies šūnu krāsu",
+                                        title="Choose a cell color",
                                         parent=root,
                                     )
                                 finally:
