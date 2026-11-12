@@ -1,0 +1,156 @@
+import re
+
+
+def apvienot_intervalus(intervali):
+    sakartoti = sorted(
+        (min(sakums, beigas), max(sakums, beigas))
+        for sakums, beigas in intervali
+    )
+    rezultats = []
+
+    for sakums, beigas in sakartoti:
+        if rezultats and sakums <= rezultats[-1][1]:
+            rezultats[-1][1] = max(rezultats[-1][1], beigas)
+        else:
+            rezultats.append([sakums, beigas])
+
+    return rezultats
+
+
+def nolasit_intervalus(vertiba):
+    vertiba = vertiba.strip()
+    if vertiba == "[]":
+        return []
+
+    atrastie = list(re.finditer(r"\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", vertiba))
+    if not atrastie:
+        raise ValueError("jānorāda intervāli formātā [sākums, beigas] vai [].")
+
+    atlikums = re.sub(r"\[\s*-?\d+\s*,\s*-?\d+\s*\]", "", vertiba)
+    if re.fullmatch(r"[\s,;]*", atlikums) is None:
+        raise ValueError("intervālu sarakstā ir nederīgs teksts vai formāts.")
+
+    intervali = []
+    for intervls in atrastie:
+        sakums, beigas = int(intervls.group(1)), int(intervls.group(2))
+        if sakums > beigas:
+            sakums, beigas = beigas, sakums
+        intervali.append([sakums, beigas])
+    return intervali
+
+
+def formatet_intervalus(intervali):
+    return " ".join(f"[{sakums}, {beigas}]" for sakums, beigas in intervali) or "[]"
+
+
+def apstradat_testu_tabulu(galvene, tabula):
+    rezultats = [galvene]
+    for rindas_numurs, rinda in enumerate(tabula[1:], start=2):
+        if len(rinda) != len(galvene):
+            raise ValueError(
+                f"{rindas_numurs}. tabulas rindā ir {len(rinda)} kolonnas, "
+                f"bet galvenē ir {len(galvene)}."
+            )
+        if not rinda[0].strip():
+            raise ValueError(f"{rindas_numurs}. tabulas rindā trūkst testa nosaukuma.")
+
+        apstradata_rinda = [rinda[0].strip()]
+        for kolonnas_numurs, vertiba in enumerate(rinda[1:], start=2):
+            try:
+                intervali = nolasit_intervalus(vertiba)
+            except ValueError as kluda:
+                raise ValueError(
+                    f"{rindas_numurs}. rindas kolonnā "
+                    f"'{galvene[kolonnas_numurs - 1]}': {kluda}"
+                ) from kluda
+            apstradata_rinda.append(
+                formatet_intervalus(apvienot_intervalus(intervali))
+            )
+        rezultats.append(apstradata_rinda)
+
+    return rezultats
+
+
+def apstradat_intervalu_tabulu(tabula):
+    sakuma_virsraksti = {"sākums", "sakums", "start", "begin"}
+    beigu_virsraksti = {"beigas", "beigu", "end", "finish"}
+    ir_virsraksts = (
+        len(tabula[0]) == 2
+        and tabula[0][0].strip().lower() in sakuma_virsraksti
+        and tabula[0][1].strip().lower() in beigu_virsraksti
+    )
+    datu_rindas = tabula[1:] if ir_virsraksts else tabula
+    intervali = []
+
+    if not datu_rindas:
+        raise ValueError("tabulā nav neviena intervāla.")
+
+    sakuma_rindas_numurs = 2 if ir_virsraksts else 1
+    for rindas_numurs, rinda in enumerate(
+        datu_rindas,
+        start=sakuma_rindas_numurs,
+    ):
+        if len(rinda) != 2:
+            raise ValueError(
+                f"{rindas_numurs}. tabulas rindā jābūt tieši divām kolonnām."
+            )
+        try:
+            sakums, beigas = (int(vienums.strip()) for vienums in rinda)
+        except ValueError as kluda:
+            raise ValueError(
+                f"{rindas_numurs}. tabulas rindā sākumam un beigām "
+                "jābūt veseliem skaitļiem."
+            ) from kluda
+        intervali.append([sakums, beigas])
+
+    apvienotie = apvienot_intervalus(intervali)
+    return [["Sākums", "Beigas"]] + [
+        [str(sakums), str(beigas)] for sakums, beigas in apvienotie
+    ]
+
+
+def apstradat_tabulu(rindas):
+    tabula = [rinda.rstrip("\r\n").split("\t") for rinda in rindas]
+    if not tabula or len(tabula[0]) < 2:
+        raise ValueError("jāielīmē tabula ar vismaz divām kolonnām.")
+
+    tabula = [[kolonna.strip() for kolonna in rinda] for rinda in tabula]
+    if tabula[0][0].lower().startswith("nr"):
+        if len(tabula) < 2:
+            raise ValueError("jāielīmē galvene un vismaz viena datu rinda.")
+        galvene = tabula[0]
+        return apstradat_testu_tabulu(galvene, tabula)
+    return apstradat_intervalu_tabulu(tabula)
+
+
+def main():
+    print("Ielīmējiet tabulu no Excel vai Google Sheets.")
+    print("Testu tabulai izmantojiet intervālus šūnās, piemēram: [1, 4] [5, 9].")
+    print("Tukšam intervālu sarakstam izmantojiet [].")
+    print("Var ielīmēt arī divu kolonnu tabulu 'Sākums' un 'Beigas'.")
+    print("Kad visas rindas ielīmētas, nospiediet Enter tukšā rindā.\n")
+
+    rindas = []
+    while True:
+        rinda = input()
+        if not rinda.strip():
+            break
+        rindas.append(rinda)
+
+    if not rindas:
+        print("Tabula netika ievadīta.")
+        return
+
+    try:
+        rezultats = apstradat_tabulu(rindas)
+    except ValueError as kluda:
+        print(f"Kļūda: {kluda}")
+        return
+
+    print("\nApvienotie intervāli:")
+    for rinda in rezultats:
+        print("\t".join(rinda))
+
+
+if __name__ == "__main__":
+    main()
