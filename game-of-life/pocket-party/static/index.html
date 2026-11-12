@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eef3ea">
+  <title>Pocket Party — Little island. Big rivalries.</title>
+  <meta name="description" content="A lightweight 3D pass-and-play party board game for 2–4 friends with animated island diorama, items, and skill minigames.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Pocket Party home">
+      <span class="brand-icon">P<span>✳</span></span>
+      <span class="brand-text">POCKET <b>PARTY</b><small>FRIENDS. RIVALS. REPEAT.</small></span>
+    </a>
+    <nav aria-label="Game controls">
+      <span class="edition">ISLAND EDITION <i>03</i></span>
+      <button type="button" class="text-button" id="cinematic-button" aria-pressed="true" title="Toggle third-person action camera">
+        <span class="status-dot on" id="cinematic-dot"></span> Action Cam
+      </button>
+      <button type="button" class="text-button" id="rules-button">
+        <span class="circle-question">?</span> How to play
+      </button>
+      <button type="button" class="icon-button is-muted" id="sound-button" aria-label="Enable sound" title="Enable sound">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path class="sound-waves" d="M15.5 8.5a5 5 0 0 1 0 7"></path>
+          <path class="sound-slash" d="M16 9l5 6m0-6l-5 6"></path>
+        </svg>
+      </button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="world">
+      <div class="intro">
+        <div class="intro-copy">
+          <span class="eyebrow"><i></i> SUNLIT DIORAMA · PASS &amp; PLAY</span>
+          <h1>Little island.<br>Big rivalries<span>.</span></h1>
+          <p>Roll 3D dice, spring clever items, and win skill minigames across a living island.</p>
+        </div>
+        <span class="play-mode"><span>●</span> 2–4 PLAYERS · ZERO INSTALL</span>
+      </div>
+
+      <div id="scene" aria-label="Interactive three-dimensional game board">
+        <div id="loading">Sculpting your sunlit island<span>...</span></div>
+      </div>
+
+      <div id="tile-tooltip" class="tile-tooltip" hidden></div>
+
+      <div class="world-footer">
+        <div class="view-controls">
+          <div class="cam-group">
+            <button type="button" id="rotate-left" aria-label="Rotate board left" title="Rotate left">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+            <button type="button" id="reset-view" aria-label="Reset camera" title="Reset view">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+            </button>
+            <button type="button" id="rotate-right" aria-label="Rotate board right" title="Rotate right">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+            </button>
+          </div>
+          <div class="preset-group" role="group" aria-label="Camera presets">
+            <button type="button" class="preset-btn active" data-preset="diorama">Diorama</button>
+            <button type="button" class="preset-btn" data-preset="scenic">Scenic</button>
+            <button type="button" class="preset-btn" data-preset="top">Map</button>
+          </div>
+          <span class="cam-hint">DRAG TO ORBIT · SCROLL TO ZOOM · HOVER TILES</span>
+        </div>
+
+        <div class="legend" aria-label="Board space legend">
+          <span><i class="dot green"></i>Key stash (+8)</span>
+          <span><i class="dot coral"></i>Trap (−4 HP)</span>
+          <span><i class="dot gold"></i>Item drop</span>
+          <span><i class="dot peach"></i>Campfire (+6 HP)</span>
+          <span><i class="dot blue"></i>Trophy shrine</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="journey-heading">
+        <h2>The party</h2>
+        <span id="turn">ROUND 01 / 08</span>
+      </div>
+
+      <div id="scoreboard" class="scoreboard"></div>
+
+      <section class="player-card" id="player-card" hidden>
+        <div class="player-top">
+          <div class="avatar" id="player-avatar">✿</div>
+          <div>
+            <h3><span id="active-name">Ready for chaos?</span></h3>
+            <p id="player-status">A fresh start. A world of mischief.</p>
+          </div>
+          <span class="player-dot" id="player-dot"></span>
+        </div>
+
+        <div class="keys-row">
+          <div>
+            <span class="stat-label">KEYS IN YOUR POCKET</span>
+            <strong id="keys-count">10 keys</strong>
+          </div>
+          <span class="keys-symbol" id="delta-badge" aria-live="polite">◆</span>
+        </div>
+
+        <div class="mini-stats">
+          <div><span>HEALTH</span><b id="hp-count">20 / 20</b></div>
+          <div><span>TROPHIES</span><b id="trophies-count">★ 0</b></div>
+          <div><span>ITEMS</span><b id="items-count">2 / 3</b></div>
+        </div>
+
+        <div class="round-progress">
+          <div class="progress-label"><span>First roll</span><span>Final showdown</span></div>
+          <div class="progress-track"><div id="progress"></div></div>
+        </div>
+      </section>
+
+      <section class="action-card">
+        <div class="action-top">
+          <span class="eyebrow" id="action-eyebrow">GATHER YOUR PEOPLE</span>
+          <span id="space-label">2–4 PLAYERS</span>
+        </div>
+        <div id="action-content"></div>
+        <div id="action-buttons"></div>
+        <p class="action-note" id="action-note">Pass the device when prompted. Zero setup hassle.</p>
+      </section>
+
+      <section class="moment">
+        <div class="section-label"><span>LATEST MISCHIEF</span><span>✧</span></div>
+        <div class="moment-body">
+          <span class="moment-icon" id="moment-icon">☀</span>
+          <div>
+            <h3 id="event-title">Good friends. Questionable decisions.</h3>
+            <p id="event-text">Gather your friends. There’s a little trouble ahead.</p>
+          </div>
+        </div>
+      </section>
+
+      <button type="button" id="journal-button" class="journal-button">
+        <span>→ &nbsp; The party journal</span>
+        <span>Open journal →</span>
+      </button>
+    </aside>
+  </main>
+
+  <footer>
+    <span>A little luck. A little skill. A lot of friendly competition.</span>
+    <span>BUILT FOR GAME NIGHT <span class="footer-flower">✳</span></span>
+  </footer>
+
+  <dialog id="rules-dialog">
+    <button type="button" class="close-modal" data-close aria-label="Close rules">×</button>
+    <span class="eyebrow">FRIENDS NOW. RIVALS IN A MINUTE.</span>
+    <h2>A sunlit island. Big trouble.</h2>
+    <p>A local pass-and-play party for 2–4 friends on one device. Choose 5, 8, or 12 rounds. Most trophies wins; keys break ties.</p>
+    <ol>
+      <li><b>Item first, then roll.</b> Optionally trigger one item before rolling 1–6 (or 2–12 with Turbo Dice!).</li>
+      <li><b>Claim shiny trophies.</b> Pass any of the three Trophy Shrines and trade 20 keys for a trophy.</li>
+      <li><b>Make it personal.</b> Rockets deal 7 damage, Magnets steal 8 keys, Switcheroos swap positions, Turbo Dice double your roll, and Bubble Shields block one hit.</li>
+      <li><b>Win the minigame.</b> After each round, compete privately in Sweet Spot, Gem Scramble, Pocket Rush, or Star Snatch. Best score earns a trophy!</li>
+      <li><b>Bounce back.</b> At 0 HP, drop up to 8 keys and respawn at the Portal Gate with full 20 HP. Trophies stay safe.</li>
+    </ol>
+    <p class="modal-fine">Crossing Space 48 warps you through the Portal Gate back to Space 00. Progress saves automatically in local SQLite.</p>
+    <button type="button" class="primary-button" data-close>Let’s make some trouble <span>→</span></button>
+  </dialog>
+
+  <dialog id="journal-dialog">
+    <button type="button" class="close-modal" data-close aria-label="Close journal">×</button>
+    <span class="eyebrow">EVERY LITTLE BETRAYAL, REMEMBERED</span>
+    <h2>The party journal.</h2>
+    <div id="journal-list"></div>
+    <button type="button" class="reset-button" id="new-game">Start a new party →</button>
+  </dialog>
+
+  <dialog id="reset-dialog">
+    <span class="eyebrow">A FRESH PAGE</span>
+    <h2>Start a new party?</h2>
+    <p>This replaces the current party and its saved progress.</p>
+    <button type="button" class="primary-button" id="confirm-reset">Start a new party <span>→</span></button>
+    <button type="button" class="text-button" data-close>Keep this party</button>
+  </dialog>
+
+  <dialog id="handoff-dialog" class="handoff-dialog">
+    <span class="eyebrow" id="handoff-label">PASS THE DEVICE</span>
+    <div class="handoff-avatar" id="handoff-avatar">✳</div>
+    <h2 id="handoff-name"></h2>
+    <p id="handoff-text"></p>
+    <button type="button" id="ready-button" class="primary-button">I’m ready <span>→</span></button>
+    <p class="modal-fine">One device. Everyone gets their moment.</p>
+  </dialog>
+
+  <dialog id="minigame-dialog" class="minigame-dialog">
+    <span class="eyebrow" id="mini-label"></span>
+    <h2 id="mini-title"></h2>
+    <p id="mini-instructions"></p>
+    <div id="mini-stage"></div>
+    <div id="mini-controls"></div>
+    <p class="modal-fine">Your score counts toward this round’s trophy.</p>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
