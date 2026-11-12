@@ -12,58 +12,44 @@ const TILE_LABELS = {
 
 const PLAYER_COLORS = [0xe06d53, 0x4c96a8, 0x7da657, 0xa47bb8];
 
-function createTileAtlasTexture() {
-  const cols = 8;
-  const rows = 8;
-  const size = 128;
+// One small texture per tile label. A shared atlas let the mipmaps of
+// neighbouring cells bleed into each other, which gave smudged labels.
+const LABEL_SIZE = 256;
+const LABEL_ICONS = {
+  49: { text: "PORTAL", font: "800 50px Outfit, sans-serif", color: "#fff8e6" },
+  50: { text: "◆", font: "700 124px sans-serif", color: "#fff8e6" },
+  51: { text: "+", font: "800 148px Outfit, sans-serif", color: "#fff8e6" },
+  52: { text: "★", font: "700 132px sans-serif", color: "#fff6cc" },
+  53: { text: "?", font: "800 136px Outfit, sans-serif", color: "#fff9e8" },
+  54: { text: "!", font: "800 144px Outfit, sans-serif", color: "#fff5ec" },
+};
+const labelTextureCache = new Map();
+
+function createLabelTexture(cellIndex, maxAnisotropy) {
+  if (labelTextureCache.has(cellIndex)) return labelTextureCache.get(cellIndex);
   const canvas = document.createElement("canvas");
-  canvas.width = cols * size;
-  canvas.height = rows * size;
-  const ctx = canvas.getContext("2d");
-
-  const drawCell = (cellIndex, fn) => {
-    const cx = (cellIndex % cols) * size;
-    const cy = Math.floor(cellIndex / cols) * size;
-    ctx.save();
-    ctx.translate(cx + size / 2, cy + size / 2);
-    fn(ctx, size);
-    ctx.restore();
-  };
-
-  // Cells 0..48 represent tile numbers 0..48; cells 49..55 represent special icons.
-  for (let i = 0; i < 49; i++) {
-    drawCell(i, (c) => {
-      c.fillStyle = "rgba(70, 82, 58, 0.72)";
-      c.font = "700 44px Outfit, sans-serif";
-      c.textAlign = "center";
-      c.textBaseline = "middle";
-      c.fillText(String(i).padStart(2, "0"), 0, 4);
-    });
+  canvas.width = LABEL_SIZE;
+  canvas.height = LABEL_SIZE;
+  const c = canvas.getContext("2d");
+  c.translate(LABEL_SIZE / 2, LABEL_SIZE / 2);
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  const icon = LABEL_ICONS[cellIndex];
+  if (icon) {
+    c.font = icon.font;
+    c.fillStyle = "rgba(0,0,0,0.18)";
+    c.fillText(icon.text, 0, 10);
+    c.fillStyle = icon.color;
+    c.fillText(icon.text, 0, 4);
+  } else {
+    c.font = "700 88px Outfit, sans-serif";
+    c.fillStyle = "rgba(70, 82, 58, 0.72)";
+    c.fillText(String(cellIndex).padStart(2, "0"), 0, 8);
   }
-
-  const icons = {
-    49: { text: "PORTAL", font: "800 24px Outfit, sans-serif", color: "#fff8e6" },
-    50: { text: "◆", font: "700 62px sans-serif", color: "#fff8e6" },
-    51: { text: "+", font: "800 74px Outfit, sans-serif", color: "#fff8e6" },
-    52: { text: "★", font: "700 66px sans-serif", color: "#fff6cc" },
-    53: { text: "?", font: "800 68px Outfit, sans-serif", color: "#fff9e8" },
-    54: { text: "!", font: "800 72px Outfit, sans-serif", color: "#fff5ec" },
-  };
-  for (const [idxStr, spec] of Object.entries(icons)) {
-    drawCell(Number(idxStr), (c) => {
-      c.fillStyle = "rgba(0,0,0,0.18)";
-      c.font = spec.font;
-      c.textAlign = "center";
-      c.textBaseline = "middle";
-      c.fillText(spec.text, 0, 5);
-      c.fillStyle = spec.color;
-      c.fillText(spec.text, 0, 2);
-    });
-  }
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = maxAnisotropy;
+  labelTextureCache.set(cellIndex, tex);
   return tex;
 }
 
@@ -96,26 +82,8 @@ function createPipTexture(value) {
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
   return tex;
-}
-
-function atlasPlaneGeometry(cellIndex, w = 0.84, h = 0.84) {
-  const geo = new THREE.PlaneGeometry(w, h);
-  const cols = 8;
-  const rows = 8;
-  const col = cellIndex % cols;
-  const row = Math.floor(cellIndex / cols);
-  const u0 = col / cols;
-  const u1 = (col + 1) / cols;
-  const v1 = 1 - row / rows;
-  const v0 = 1 - (row + 1) / rows;
-  const uv = geo.attributes.uv;
-  uv.setXY(0, u0, v1);
-  uv.setXY(1, u1, v1);
-  uv.setXY(2, u0, v0);
-  uv.setXY(3, u1, v0);
-  uv.needsUpdate = true;
-  return geo;
 }
 
 export class PartyWorld {
@@ -152,7 +120,7 @@ export class PartyWorld {
       alpha: false,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
@@ -282,7 +250,7 @@ export class PartyWorld {
     const sun = new THREE.DirectionalLight(0xfff4d6, 2.25);
     sun.position.set(-16, 26, 14);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, {
       left: -17,
       right: 17,
@@ -629,12 +597,15 @@ export class PartyWorld {
     const beamGeo = new THREE.ConeGeometry(0.95, 5.2, 12, 1, true);
     beamGeo.translate(0, -2.6, 0);
     beamGeo.rotateX(Math.PI / 2);
+    // Additive glow: a normal transparent cone washed out the trees behind it.
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0xffe89e,
       transparent: true,
-      opacity: 0.14,
+      opacity: 0.07,
       side: THREE.DoubleSide,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: false,
     });
     this.lighthouseBeam.add(new THREE.Mesh(beamGeo, beamMat));
     this.world.add(this.lighthouseBeam);
@@ -702,12 +673,26 @@ export class PartyWorld {
       trap: 54,
     };
 
-    const atlasTex = createTileAtlasTexture();
-    const labelMat = new THREE.MeshBasicMaterial({
-      map: atlasTex,
-      transparent: true,
-      depthWrite: false,
-    });
+    const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
+    const labelGeo = new THREE.PlaneGeometry(0.84, 0.84);
+    const labelMats = new Map();
+    const labelMat = (cell) => {
+      if (!labelMats.has(cell)) {
+        labelMats.set(
+          cell,
+          new THREE.MeshBasicMaterial({
+            map: createLabelTexture(cell, maxAniso),
+            transparent: true,
+            depthWrite: false,
+            // Keep the label in front of the tile top at all camera distances.
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2,
+          })
+        );
+      }
+      return labelMats.get(cell);
+    };
 
     const keyGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.04, 8);
     const keyMat = this.mat(0xf5c84c, { roughness: 0.35, metalness: 0.45, emissive: 0x7a5108, emissiveIntensity: 0.25 });
@@ -726,7 +711,7 @@ export class PartyWorld {
       this.tileMeshes.push(tile);
 
       const cell = iconCellMap[kind] ?? i;
-      const lbl = new THREE.Mesh(atlasPlaneGeometry(cell, 0.84, 0.84), labelMat);
+      const lbl = new THREE.Mesh(labelGeo, labelMat(cell));
       // Keep tile numbers and icons upright toward the primary diorama viewer
       lbl.rotation.set(-Math.PI / 2, 0, 0);
       lbl.position.set(p.x, 0.468, p.z);
@@ -925,6 +910,28 @@ export class PartyWorld {
       [-11.0, 2.6, 0.74], [-7.4, 7.2, 0.72], [-6.0, 4.4, 0.68], [-1.8, 4.5, 0.58],
       [3.6, 4.5, 0.68], [2.0, -0.1, 0.74], [-7.0, -2.5, 0.85], [10.6, 0.2, 0.72],
     ];
+    // Move each tree off the trail, so no crown covers a tile or its label.
+    const clearOfTrack = (list, crownRadius) => {
+      for (const tree of list) {
+        for (let pass = 0; pass < 6; pass++) {
+          const need = 0.95 + crownRadius * tree[2];
+          let moved = false;
+          for (const p of this.points) {
+            const dx = tree[0] - p.x;
+            const dz = tree[1] - p.z;
+            const d = Math.hypot(dx, dz) || 0.001;
+            if (d < need) {
+              tree[0] = p.x + (dx / d) * need;
+              tree[1] = p.z + (dz / d) * need;
+              moved = true;
+            }
+          }
+          if (!moved) break;
+        }
+      }
+    };
+    clearOfTrack(pines, 0.76);
+
     const trunkGeo = new THREE.CylinderGeometry(0.08, 0.11, 0.85, 6);
     const trunkInst = new THREE.InstancedMesh(trunkGeo, this.mat(0x876c4b), pines.length + 8);
     trunkInst.castShadow = true;
@@ -957,6 +964,7 @@ export class PartyWorld {
       [5.5, -3.2, 0.82, 0xf3c0b4], [8.0, 2.0, 0.85, 0x89aa65], [-10.9, -0.3, 0.72, 0xf4bbb0],
       [-4.0, 4.5, 0.74, 0x91b06c], [0.0, 4.4, 0.68, 0xf3c2b6],
     ];
+    clearOfTrack(roundTrees, 0.84);
     const crownGeo = new THREE.IcosahedronGeometry(0.84, 0);
     const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, flatShading: true });
     const roundInst = new THREE.InstancedMesh(crownGeo, crownMat, roundTrees.length);
@@ -1343,7 +1351,7 @@ export class PartyWorld {
     this.el.classList.add("cinematic");
     document.body.classList.add("action-playing");
     this.el.dataset.shot = "enter";
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.resize();
     this.shotEntering = true;
     const from = this.camera.position.clone();
@@ -1375,7 +1383,7 @@ export class PartyWorld {
     this.el.classList.remove("cinematic");
     document.body.classList.remove("action-playing");
     delete this.el.dataset.shot;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.resize();
     this.shotEnding = false;
   }
@@ -1836,6 +1844,9 @@ export class PartyWorld {
       this.camera.position.copy(this.overviewPosition());
       this.camera.lookAt(this.overviewLook);
     }
+    // setSize clears the canvas. Draw at once so no blank frame shows
+    // when the view switches to or from the full-screen action camera.
+    this.renderer.render(this.scene, this.camera);
   }
 
   _animate() {
