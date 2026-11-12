@@ -438,16 +438,21 @@ export class PartyWorld {
     this.slab(25.2, 17.6, 0.14, 3.0, 0x8db86c, -0.02);
 
     // Sculpted rolling northern hills
+    // [x, z, radius x, radius z, height]. The hills stay between the trail
+    // and the island edge. Larger hills covered tiles and hung over the beach.
     const hillSpecs = [
-      [-5.6, -7.2, 2.2, 0x80ab60],
-      [-2.1, -7.5, 2.75, 0x8bb669],
-      [1.7, -7.2, 2.0, 0x7ba45c],
-      [-11.0, -0.4, 1.3, 0x86b064],
-      [4.3, -7.1, 1.5, 0x7da75d],
+      [-5.0, -7.6, 2.0, 0.95, 0.9, 0x80ab60],
+      [-1.6, -7.7, 2.4, 1.0, 1.15, 0x8bb669],
+      [2.0, -7.6, 1.8, 0.9, 0.8, 0x7ba45c],
+      [4.9, -7.5, 1.3, 0.8, 0.6, 0x7da75d],
+      [-11.7, -0.2, 0.8, 1.3, 0.55, 0x86b064],
     ];
-    for (const [x, z, s, c] of hillSpecs) {
-      const m = this.mesh(new THREE.IcosahedronGeometry(s, 1), c, x, 0.1, z);
-      m.scale.set(1.15, 0.54, 0.92);
+    const hillGeo = new THREE.IcosahedronGeometry(1, 1);
+    this.hills = [];
+    for (const [x, z, rx, rz, h, c] of hillSpecs) {
+      const m = this.mesh(hillGeo, c, x, 0.2, z);
+      m.scale.set(rx, h, rz);
+      this.hills.push({ x, z, rx, rz });
     }
 
     // Instanced coastal boulders & beach rocks (1 draw call)
@@ -910,13 +915,15 @@ export class PartyWorld {
       [-11.0, 2.6, 0.74], [-7.4, 7.2, 0.72], [-6.0, 4.4, 0.68], [-1.8, 4.5, 0.58],
       [3.6, 4.5, 0.68], [2.0, -0.1, 0.74], [-7.0, -2.5, 0.85], [10.6, 0.2, 0.72],
     ];
-    // Move each tree off the trail, so no crown covers a tile or its label.
+    // Move each tree off the trail and out of the hills, so no crown covers
+    // a tile or its label and no tree sticks out of a hill.
     const clearOfTrack = (list, crownRadius) => {
       for (const tree of list) {
-        for (let pass = 0; pass < 6; pass++) {
-          const need = 0.95 + crownRadius * tree[2];
+        const r = crownRadius * tree[2];
+        for (let pass = 0; pass < 8; pass++) {
           let moved = false;
           for (const p of this.points) {
+            const need = 0.95 + r;
             const dx = tree[0] - p.x;
             const dz = tree[1] - p.z;
             const d = Math.hypot(dx, dz) || 0.001;
@@ -926,6 +933,20 @@ export class PartyWorld {
               moved = true;
             }
           }
+          for (const h of this.hills) {
+            const ex = (tree[0] - h.x) / (h.rx + r);
+            const ez = (tree[1] - h.z) / (h.rz + r);
+            const e = Math.hypot(ex, ez);
+            if (e < 1) {
+              const k = 1 / Math.max(e, 0.001);
+              tree[0] = h.x + (tree[0] - h.x) * k;
+              tree[1] = h.z + (tree[1] - h.z) * k;
+              moved = true;
+            }
+          }
+          // Keep the tree on the meadow.
+          tree[0] = THREE.MathUtils.clamp(tree[0], -11.8 + r, 11.8 - r);
+          tree[1] = THREE.MathUtils.clamp(tree[1], -8.1 + r, 8.1 - r);
           if (!moved) break;
         }
       }
