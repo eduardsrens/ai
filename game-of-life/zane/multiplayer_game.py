@@ -1,12 +1,17 @@
 import json
+import math
 import secrets
 import socket
 import socketserver
 import threading
+import time
 
 
 PORT = 50505
-MAX_STROKE_CELLS = 300
+GAME_TIME_LIMIT_SECONDS = 15 * 60
+ROUND_TIME_LIMIT_SECONDS = 15
+MAX_SETUP_CELLS = 20
+MAX_TURN_CELLS = 6
 ATTACK_COLOR = "#ff4545"
 PLAYER_COLORS = ("#59e1a5", "#5aa9ff", "#ffd166", "#c792ea")
 
@@ -32,6 +37,9 @@ class GameRoom:
         self.round_number = 0
         self.generation = 0
         self.winner = None
+        self.started_at = None
+        self.round_deadline = None
+        self.round_submissions = {}
         self.message = "Waiting for players to join."
 
     def _territory(self, x, y):
@@ -86,38 +94,51 @@ class GameRoom:
 
     def start(self, token):
         with self.lock:
+            self._finish_if_time_expired()
             player_index = self._authenticated_player(token)
             if player_index != 0:
                 raise ValueError("Only the host can start the game.")
             if self.phase != "setup":
                 raise ValueError("Wait until all players have joined.")
             self.phase = "action"
-            self.round_number = 1
-            order = self._turn_order()
-            self.current_turn = order[0] if order else None
-            self.message = self._turn_message()
+            self.started_at = time.monotonic()
+            self._begin_round()
 
     def leave(self, token):
         with self.lock:
+            self._finish_if_time_expired()
             player_index = self._authenticated_player(token)
             player = self.players[player_index]
             if not player["alive"]:
                 return
             player["alive"] = False
-            if self.phase == "action" and self.current_turn == player_index:
-                self._advance_turn(player_index)
+            if self.phase == "action" and self._all_alive_players_submitted():
+                self._resolve_round()
             else:
                 self.message = f"{player['name']} left the game."
 
-    def submit_stroke(self, token, cells):
+    def submit_stroke(self, token, cells, round_number):
         with self.lock:
+            self._finish_if_time_expired()
+            self._finish_round_if_expired()
             player_index = self._authenticated_player(token)
+            if round_number != self.round_number:
+                raise ValueError("This drawing belongs to an earlier round.")
             player = self.players[player_index]
             if not player["alive"]:
                 raise ValueError("You have been eliminated.")
-            if not isinstance(cells, list) or not cells or len(cells) > MAX_STROKE_CELLS:
+            if not isinstance(cells, list):
+                raise ValueError("A drawing must be a list of cells.")
+            if self.phase == "setup" and (
+                not cells or len(cells) > MAX_SETUP_CELLS
+            ):
                 raise ValueError(
-                    f"A stroke must contain between 1 and {MAX_STROKE_CELLS} cells."
+                    f"A starting drawing must contain between 1 and "
+                    f"{MAX_SETUP_CELLS} cells."
+                )
+            if self.phase == "action" and len(cells) > MAX_TURN_CELLS:
+                raise ValueError(
+                    f"A round can contain at most {MAX_TURN_CELLS} cells."
                 )
 
             checked_cells = []
@@ -139,57 +160,91 @@ class GameRoom:
             if self.phase == "setup":
                 target_area = player_index
                 color = player["color"]
+                existing_cells = {
+                    point
+                    for point in self.cells
+                    if self._territory(*point) == player_index
+                }
+                if len(existing_cells | seen) > MAX_SETUP_CELLS:
+                    raise ValueError(
+                        f"Your starting pattern can contain at most "
+                        f"{MAX_SETUP_CELLS} cells."
+                    )
             elif self.phase == "action":
-                if self.current_turn != player_index:
-                    raise ValueError("Wait for your turn.")
-                if not checked_cells:
-                    raise ValueError("Draw a stroke before submitting.")
-                target_area = self._territory(*checked_cells[0])
-                if any(self._territory(*point) != target_area for point in seen):
-                    raise ValueError("One turn's stroke must stay in one territory.")
-                if target_area != player_index:
-                    if self._team(target_area) == self._team(player_index):
-                        raise ValueError("You can attack opponents, not a teammate.")
-                    color = ATTACK_COLOR
+                if player_index in self.round_submissions:
+                    raise ValueError("You have already submitted this round.")
+                if len(seen) > MAX_TURN_CELLS:
+                    raise ValueError(
+                        f"A round can contain at most {MAX_TURN_CELLS} cells."
+                    )
+                if seen:
+                    target_area = self._territory(*checked_cells[0])
+                    if any(self._territory(*point) != target_area for point in seen):
+                        raise ValueError(
+                            "One round's drawing must stay in one territory."
+                        )
+                    if target_area != player_index:
+                        if self._team(target_area) == self._team(player_index):
+                            raise ValueError(
+                                "You can attack opponents, not a teammate."
+                            )
+                        color = ATTACK_COLOR
+                    else:
+                        color = player["color"]
                 else:
-                    color = player["color"]
+                    color = None
             else:
                 raise ValueError("The game is not accepting drawings right now.")
 
-            if any(self._territory(x, y) != target_area for x, y in checked_cells):
+            if seen and any(
+                self._territory(x, y) != target_area for x, y in checked_cells
+            ):
                 raise ValueError("Drawings must stay inside the selected territory.")
 
-            for point in seen:
-                self.cells[point] = color
+            if self.phase == "setup":
+                for point in seen:
+                    self.cells[point] = color
+            else:
+                self.round_submissions[player_index] = {
+                    "cells": seen,
+                    "color": color,
+                }
+                if self._all_alive_players_submitted():
+                    self._resolve_round()
 
-            if self.phase == "action":
-                self._advance_turn(player_index)
+    def _begin_round(self):
+        self.round_number += 1
+        self.current_turn = None
+        self.round_deadline = time.monotonic() + ROUND_TIME_LIMIT_SECONDS
+        self.round_submissions = {}
+        self.message = (
+            f"Round {self.round_number}: all players draw at the same time. "
+            f"You have {ROUND_TIME_LIMIT_SECONDS} seconds."
+        )
 
-    def _turn_order(self):
-        return [player["index"] for player in self.players if player["alive"]]
+    def _all_alive_players_submitted(self):
+        return all(
+            not player["alive"] or player["index"] in self.round_submissions
+            for player in self.players
+        )
 
-    def _turn_message(self):
-        if self.current_turn is None:
-            return "Waiting for the next round."
-        player = self.players[self.current_turn]
-        return f"Round {self.round_number}: {player['name']}'s turn. Draw one stroke."
+    def _finish_round_if_expired(self):
+        if (
+            self.phase == "action"
+            and self.round_deadline is not None
+            and time.monotonic() >= self.round_deadline
+        ):
+            self._resolve_round()
 
-    def _advance_turn(self, player_index):
-        order = self._turn_order()
-        next_players = [index for index in order if index > player_index]
-        if next_players:
-            self.current_turn = next_players[0]
-            self.message = self._turn_message()
-            return
-
+    def _resolve_round(self):
+        for player_index in sorted(self.round_submissions):
+            submission = self.round_submissions[player_index]
+            for point in submission["cells"]:
+                self.cells[point] = submission["color"]
         self._advance_life()
         if self.phase == "finished":
             return
-        self.round_number += 1
-        order = self._turn_order()
-        self.current_turn = order[0] if order else None
-        if self.phase != "finished":
-            self.message = self._turn_message()
+        self._begin_round()
 
     def _advance_life(self):
         for _ in range(self.generations_per_round):
@@ -240,8 +295,35 @@ class GameRoom:
             else:
                 self.message = f"Team {self.winner + 1} wins!"
 
+    def _finish_if_time_expired(self):
+        if (
+            self.phase != "action"
+            or self.started_at is None
+            or time.monotonic() - self.started_at < GAME_TIME_LIMIT_SECONDS
+        ):
+            return
+
+        self.phase = "finished"
+        self.current_turn = None
+        self.winner = None
+        self.message = "Time is up. The game is a draw."
+
     def state(self):
         with self.lock:
+            self._finish_if_time_expired()
+            self._finish_round_if_expired()
+            time_remaining = None
+            if self.phase == "action" and self.started_at is not None:
+                time_remaining = max(
+                    0,
+                    GAME_TIME_LIMIT_SECONDS
+                    - int(time.monotonic() - self.started_at),
+                )
+            round_time_remaining = None
+            if self.phase == "action" and self.round_deadline is not None:
+                round_time_remaining = max(
+                    0, math.ceil(self.round_deadline - time.monotonic())
+                )
             return {
                 "mode": self.mode,
                 "width": self.width,
@@ -257,6 +339,9 @@ class GameRoom:
                 "winner": self.winner,
                 "message": self.message,
                 "generations_per_round": self.generations_per_round,
+                "time_remaining": time_remaining,
+                "round_time_remaining": round_time_remaining,
+                "submitted_players": sorted(self.round_submissions),
             }
 
 
@@ -305,7 +390,9 @@ class _GameTCPServer(socketserver.ThreadingTCPServer):
             self.room.leave(token)
             return {"state": self.room.state()}
         if action == "stroke":
-            self.room.submit_stroke(token, request.get("cells"))
+            self.room.submit_stroke(
+                token, request.get("cells"), request.get("round")
+            )
             return {"state": self.room.state()}
         raise ValueError("Unknown game request.")
 
@@ -367,9 +454,14 @@ class GameClient:
     def leave_game(self):
         return self._request({"action": "leave", "token": self.token})["state"]
 
-    def submit_stroke(self, cells):
+    def submit_stroke(self, cells, round_number):
         return self._request(
-            {"action": "stroke", "token": self.token, "cells": cells}
+            {
+                "action": "stroke",
+                "token": self.token,
+                "cells": cells,
+                "round": round_number,
+            }
         )["state"]
 
 
