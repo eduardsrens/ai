@@ -6,6 +6,7 @@ A collection of Python-powered interactive games and simulations inside [`game-o
 - [**Ance (`game-of-life/ance/`)**](game-of-life/ance/) — Pygame + Tkinter Game of Life with central symmetry, color blending, and saved drawings.
 - [**Zane (`game-of-life/zane/`)**](game-of-life/zane/) — Tkinter Solo & LAN Multiplayer Game of Life with `Play Game.bat` launcher.
 - [**Pocket Party (`game-of-life/pocket-party/`)**](game-of-life/pocket-party/) — Lightweight 3D pass-and-play party board game for 2–4 local players, powered by Python (stdlib) + Three.js WebGL2.
+- [**Maze solver and LAN race (`maze/`)**](maze/README.md) — Pygame-ce maze solver plus a 20-level, two-player vegetable-avatar race.
 - [`hello.py`](hello.py) — Starter Python script.
 
 ## Play Pocket Party
