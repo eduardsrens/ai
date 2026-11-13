@@ -1,0 +1,29 @@
+name: Pocket Party
+on:
+  push:
+    paths:
+      - 'game-of-life/pocket-party/**'
+      - '.github/workflows/pocket-party.yml'
+  pull_request:
+    paths:
+      - 'game-of-life/pocket-party/**'
+      - '.github/workflows/pocket-party.yml'
+permissions:
+  contents: read
+jobs:
+  python:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.12']
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: game-of-life/pocket-party
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q game.py server.py
