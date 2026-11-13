@@ -2,6 +2,20 @@
 
 - Existing Conway's Game of Life implementations are in [`game-of-life/`](game-of-life/).
 - [**Pocket Party**](game-of-life/pocket-party/) is a separate 3D party board game for 2–4 local players, with Python rules, a Three.js browser view, and third-person action animations.
+- [**Maze solver**](maze/Klavs_maze.py) visualizes two-way search, compares BFS/DFS, and generates random mazes.
+
+## Run the maze solver
+
+```sh
+cd maze
+python Klavs_maze.py
+```
+
+No additional packages are needed. Maze maps are `.txt` files: `#` is a wall,
+spaces or `.` are passages, `A`/`S` marks the start, and `B`/`E` marks the exit.
+The included [`maze_Klavs_101x151.txt`](maze/maze_Klavs_101x151.txt) is a
+large generated example. Use the GUI to select maps, animate the search, or
+create and save a new maze.
 
 ## Play Pocket Party
 
