@@ -1,5 +1,0 @@
-__pycache__/
-*.pyc
-saves.sqlite3*
-.venv/
-artifacts/
