@@ -1,49 +1,65 @@
 CONWAY'S GAME OF LIFE
 =====================
 
-PALAIŠANA WINDOWS DATORĀ
------------------------
-1. Izpako visu ZIP arhīvu vienā mapē.
-2. Uzinstalē Python 3 no https://www.python.org/downloads/windows/
-   Instalācijas laikā atzīmē "Add python.exe to PATH".
-   Izmanto oficiālo Windows instalētāju, kurā ir iekļauts Tkinter.
-3. Veic dubultklikšķi uz "Play Game.bat".
-4. Spēles sākuma ekrānā izvēlies Solo vai Multiplayer.
+RUNNING ON WINDOWS
+------------------
+1. Extract the entire ZIP archive into a single folder.
+2. Install Python 3 from https://www.python.org/downloads/windows/
+   During installation, enable "Add python.exe to PATH".
+   Use the official Windows installer that includes Tkinter.
+3. Double-click "Play Game.bat" or run `py -3 game_of_life.py`.
+4. On the start screen, choose Singleplayer or Multiplayer.
 
-SOLO
-----
-Klikšķini un velc, lai zīmētu. Izmanto zīmuli, dzēšgumiju, krāsu paleti
-un Lexicon figūras. Scrollbar pārvieto bezgalīgo laukumu; peles ritenītis
-maina tālummaiņu.
+The game code, including multiplayer and robot modes, is all in one file:
+`game_of_life.py`.
+
+SINGLEPLAYER
+------------
+Click and drag to draw. Press E to toggle the eraser, or hold Shift to erase
+briefly. Use the pencil, eraser, and on-screen color wheel. The scrollbars
+move the infinite board; the mouse wheel changes the zoom level.
 
 MULTIPLAYER
 -----------
-Šī versija darbojas lokālajā tīklā (tas pats Wi-Fi/LAN), nevis internetā.
-Visiem spēlētājiem jābūt vienā tīklā un katram datorā jāpalaiž sava spēles
-kopija.
+This version runs on the local network (same Wi-Fi/LAN), not the internet.
+All players must be on the same network and each computer must run its own copy
+of the game.
 
-1. Viens spēlētājs izvēlas 1v1 vai 2v2 un spiež "Host game".
-2. Hosts pārējiem nosūta ekrānā redzamo Host address un Room code.
-3. Pārējie ievada savu vārdu, host adresi un istabas kodu, tad spiež
-   "Join game".
-4. Multiplayer izvēlnē ir redzami spēles noteikumi. Kad visi pievienojušies,
-   katrs savā laukumā var uzzīmēt līdz 20 rūtiņām, tad hosts spiež "Start game".
-5. Katrā kārtā visi spēlētāji zīmē vienlaikus 15 sekundes. Katrs var izvietot
-   līdz 6 rūtiņām ar klikšķiem vai vilkšanu, arī atsevišķi, un spiež
-   "Pabeigt gājienu". Kad visi iesnieguši vai laiks beidzies, zīmējumi tiek
-   izspēlēti. Savā laukumā var aizsargāties, bet pretinieka laukumā (sarkanā)
-   uzbrukt. 2v2 režīmā komandas biedriem uzbrukt nedrīkst.
-6. Pēc kārtas spēle izpilda 10 Game of Life paaudzes. Spēlētājs
-   tiek izslēgts, ja viņa sākuma laukumā vairs nav dzīvu šūnu. Uzvar pēdējais
-   izdzīvojušais spēlētājs vai komanda; spēles beigās parādās uzvaras ekrāns
-   ar tekstu "KONČA NO ZANES!".
-7. Multiplayer spēle ilgst ne vairāk kā 15 minūtes. Ja kopējais laiks beidzas,
-   pirms palikusi tikai viena komanda, spēle beidzas neizšķirti.
+1. The host chooses Solo, Duo, or Test server from the game-mode menu. Solo is
+   a 1v1 match and Duo is a 2v2 match. Test server starts a local 1v1 game
+   against robot players.
+2. Click "Options" to set the starting cell limit (1-100), drawing time
+   (5-20 seconds), match length (1-30 minutes), and cells allowed per turn
+   (1-20). Click "Host game" to start.
+3. The host sends the displayed Host address and Room code to the other players.
+4. Each player chooses one of 10 colors. A color cannot repeat within a match.
+   Everyone enters their name, host address, and room code, then clicks "Join game".
+5. Use the Rules button on the main menu to review the game rules. Once everyone
+   joins, each player can draw in their own territory up to the host-selected
+   cell limit, and then the host clicks "Start game".
+6. Each round, all players draw simultaneously for the host-selected time. Each can
+   place up to the host-selected cells-per-turn limit by clicking or dragging,
+   either individually or in groups.
+   With the eraser (E or hold Shift), you can remove unsubmitted cells; during setup,
+   it deletes cells in your own territory. Press "Submit turn" or Space to submit the
+   turn. When all players have submitted or the timer ends, the drawings are played.
+   You can defend your own territory and attack the opponent's territory (shown in red).
+   In Duo mode, teammates cannot attack each other. During the game, you can press the
+   happy, sad, or angry reaction buttons; all players see the reactions.
+7. After each turn, the game advances 10 generations of Conway's Game of Life. A
+   player is eliminated if their starting territory contains no live cells. The last
+   surviving player or team wins; the result screen shows a randomized message and one
+   random Game of Life fact. If the last cells disappear simultaneously, the player with
+   more cells before the last generation wins.
+8. If the host-selected match length ends, the player or team with the highest number
+   of live cells in their territory wins. In Duo mode, teammate territory cells are
+   counted together. If the number is tied, compare the cell count before the last
+   generation; if that is also tied, the host wins. There is no draw.
+9. If a player disconnects or leaves to the menu, they can rejoin with the same name,
+   color, and room code. An inactive connection is marked as disconnected after 10 seconds.
 
-Ja Windows Firewall jautā, atļauj Python piekļuvi Private networks
-privātajam tīklam. Atļauju dod tikai uzticamā tīklā un kopīgo istabas kodu
-tikai ar spēlētājiem, kurus esi uzaicinājis.
+If Windows Firewall asks, allow Python access to Private networks. Only do this on a
+trusted network and share the room code only with players you invited.
 
-Failus drīkst pārvietot vai ZIP arhīvu nokopēt uz citu Windows datoru.
-Otrajā datorā Python 3 jābūt uzinstalētam; spēles Python failus nevajag
-instalēt vai pārkopēt atsevišķi no palaidēja.
+`game_of_life.py` can be copied to another Windows computer. The other computer must
+have Python 3 with Tkinter installed.

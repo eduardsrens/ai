@@ -40,18 +40,18 @@ class IntervaluTesti(unittest.TestCase):
         rezultats = _modulis.apstradat_tabulu(
             [
                 "Nr.\tAnce\tZane",
-                "# 1. Nepārklājas\t[1, 4] [5, 9] [12, 13]\t[1,6] [8,10] [14,17]",
-                "# 2. Saskaras malas\t[1, 4] [4, 9]\t[-2, -5] [-2, 6] [6, 10]",
-                "# 10. Tukša kopa\t[]\t[]",
+                "# 1. Non-overlapping\t[1, 4] [5, 9] [12, 13]\t[1,6] [8,10] [14,17]",
+                "# 2. Touching edges\t[1, 4] [4, 9]\t[-2, -5] [-2, 6] [6, 10]",
+                "# 10. Empty set\t[]\t[]",
             ]
         )
         self.assertEqual(
             rezultats,
             [
                 ["Nr.", "Ance", "Zane"],
-                ["# 1. Nepārklājas", "[1, 4] [5, 9] [12, 13]", "[1, 6] [8, 10] [14, 17]"],
-                ["# 2. Saskaras malas", "[1, 9]", "[-5, 10]"],
-                ["# 10. Tukša kopa", "[]", "[]"],
+                ["# 1. Non-overlapping", "[1, 4] [5, 9] [12, 13]", "[1, 6] [8, 10] [14, 17]"],
+                ["# 2. Touching edges", "[1, 9]", "[-5, 10]"],
+                ["# 10. Empty set", "[]", "[]"],
             ],
         )
 
@@ -62,20 +62,20 @@ class IntervaluTesti(unittest.TestCase):
         )
 
     def test_noraida_nederigu_intervalu(self):
-        with self.assertRaisesRegex(ValueError, "nederīgs teksts"):
-            _modulis.nolasit_intervalus("[1, 4] kļūda")
+        with self.assertRaisesRegex(ValueError, "invalid text"):
+            _modulis.nolasit_intervalus("[1, 4] error")
 
     def test_noraida_nevienadu_kolonnu_skaitu(self):
-        with self.assertRaisesRegex(ValueError, "kolonnas"):
+        with self.assertRaisesRegex(ValueError, "columns"):
             _modulis.apstradat_tabulu(["Nr.\tAnce\tZane", "1\t[1, 2]"])
 
     def test_atbalsta_divu_kolonnu_intervalu_tabulu(self):
         rezultats = _modulis.apstradat_tabulu(
-            ["Sākums\tBeigas", "1\t3", "2\t6", "8\t10"]
+            ["Start\tEnd", "1\t3", "2\t6", "8\t10"]
         )
         self.assertEqual(
             rezultats,
-            [["Sākums", "Beigas"], ["1", "6"], ["8", "10"]],
+            [["Start", "End"], ["1", "6"], ["8", "10"]],
         )
 
 
