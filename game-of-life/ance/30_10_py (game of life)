@@ -1,0 +1,591 @@
+"""Conway's Game of Life with a pygame interface and wrapping grid edges."""
+
+import json
+import random
+import sys
+import tkinter as tk
+from pathlib import Path
+from tkinter import colorchooser, messagebox, simpledialog
+from typing import Optional
+
+try:
+    import pygame
+except ImportError as error:
+    raise SystemExit(
+        "pygame was not found. Install it with: python -m pip install pygame"
+    ) from error
+
+
+CELL_SIZE = 20
+COLUMNS = 48
+ROWS = 32
+HEADER_HEIGHT = 100
+WINDOW_WIDTH = COLUMNS * CELL_SIZE
+WINDOW_HEIGHT = HEADER_HEIGHT + ROWS * CELL_SIZE
+BACKGROUND = (18, 22, 30)
+HEADER_BACKGROUND = (27, 33, 44)
+GRID_COLOR = (42, 49, 62)
+CELL_COLOR = (105, 220, 170)
+TEXT_COLOR = (235, 240, 248)
+MUTED_COLOR = (167, 178, 195)
+BUTTON_COLOR = (47, 58, 74)
+BUTTON_HOVER_COLOR = (66, 82, 103)
+DRAWINGS_FILE = Path(__file__).with_name("game_of_life_drawings.json")
+Color = tuple[int, int, int]
+ColorGrid = list[list[Optional[Color]]]
+
+
+def create_grid() -> list[list[bool]]:
+    """Return an empty grid."""
+    return [[False for _ in range(COLUMNS)] for _ in range(ROWS)]
+
+
+def read_drawings() -> dict[str, tuple[list[list[bool]], ColorGrid]]:
+    """Read saved drawings, including older files without per-cell colors."""
+    if not DRAWINGS_FILE.exists():
+        return {}
+
+    with DRAWINGS_FILE.open(encoding="utf-8") as file:
+        drawings = json.load(file)
+    if not isinstance(drawings, dict):
+        raise ValueError("The saved drawing file has an invalid format.")
+
+    validated_drawings = {}
+    for name, drawing in drawings.items():
+        if isinstance(drawing, dict):
+            grid = drawing.get("grid")
+            colors = drawing.get("colors")
+        else:
+            grid = drawing
+            colors = None
+        if (
+            not isinstance(name, str)
+            or not isinstance(grid, list)
+            or len(grid) != ROWS
+            or any(
+                not isinstance(row, list)
+                or len(row) != COLUMNS
+                or any(not isinstance(cell, bool) for cell in row)
+                for row in grid
+            )
+        ):
+            raise ValueError("Invalid data was found in the saved drawing file.")
+        if colors is None:
+            color_grid: ColorGrid = [
+                [CELL_COLOR if alive else None for alive in row] for row in grid
+            ]
+        elif (
+            not isinstance(colors, list)
+            or len(colors) != ROWS
+            or any(
+                not isinstance(row, list)
+                or len(row) != COLUMNS
+                or any(
+                    color is not None
+                    and (
+                        not isinstance(color, list)
+                        or len(color) != 3
+                        or any(
+                            not isinstance(channel, int)
+                            or isinstance(channel, bool)
+                            or not 0 <= channel <= 255
+                            for channel in color
+                        )
+                    )
+                    for color in row
+                )
+                for row in colors
+            )
+        ):
+            raise ValueError("The saved colors have an invalid format.")
+        else:
+            color_grid = [
+                [tuple(color) if color is not None else None for color in row]
+                for row in colors
+            ]
+        if any(
+            grid[row][column] and color_grid[row][column] is None
+            for row in range(ROWS)
+            for column in range(COLUMNS)
+        ):
+            raise ValueError("Live cells are missing a color assignment.")
+        validated_drawings[name] = (grid, color_grid)
+    return validated_drawings
+
+
+def write_drawings(
+    drawings: dict[str, tuple[list[list[bool]], ColorGrid]],
+) -> None:
+    """Write all named drawings to disk."""
+    with DRAWINGS_FILE.open("w", encoding="utf-8") as file:
+        json.dump(
+            {
+                name: {"grid": grid, "colors": colors}
+                for name, (grid, colors) in drawings.items()
+            },
+            file,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def ask_for_drawing_name(title: str, prompt: str) -> Optional[str]:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        return simpledialog.askstring(title, prompt, parent=root)
+    finally:
+        root.destroy()
+
+
+def show_error(message: str) -> None:
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        messagebox.showerror("Game of Life", message, parent=root)
+    finally:
+        root.destroy()
+
+
+def next_generation(grid: list[list[bool]]) -> list[list[bool]]:
+    """Calculate the next generation, wrapping neighbors across each edge."""
+    updated = create_grid()
+    for row in range(ROWS):
+        for column in range(COLUMNS):
+            neighbors = sum(
+                grid[(row + row_offset) % ROWS][(column + column_offset) % COLUMNS]
+                for row_offset in (-1, 0, 1)
+                for column_offset in (-1, 0, 1)
+                if row_offset != 0 or column_offset != 0
+            )
+            updated[row][column] = neighbors == 3 or (
+                grid[row][column] and neighbors == 2
+            )
+    return updated
+
+
+def blend_colors(colors: list[Color]) -> Color:
+    """Return the RGB average of the living cells that created a new cell."""
+    count = len(colors)
+    return tuple(
+        round(sum(color[channel] for color in colors) / count)
+        for channel in range(3)
+    )
+
+
+def mirrored_cells(row: int, column: int) -> tuple[tuple[int, int], ...]:
+    """Return a cell and its point-reflected position across the grid center."""
+    opposite = (ROWS - 1 - row, COLUMNS - 1 - column)
+    if opposite == (row, column):
+        return ((row, column),)
+    return ((row, column), opposite)
+
+
+def next_colored_generation(
+    grid: list[list[bool]], colors: ColorGrid
+) -> tuple[list[list[bool]], ColorGrid]:
+    """Advance the Game of Life and blend neighbor colors for newly born cells."""
+    updated = next_generation(grid)
+    updated_colors: ColorGrid = [
+        [None for _ in range(COLUMNS)] for _ in range(ROWS)
+    ]
+    for row in range(ROWS):
+        for column in range(COLUMNS):
+            if not updated[row][column]:
+                continue
+            if grid[row][column]:
+                updated_colors[row][column] = colors[row][column] or CELL_COLOR
+            else:
+                parent_colors = [
+                    colors[(row + row_offset) % ROWS][
+                        (column + column_offset) % COLUMNS
+                    ] or CELL_COLOR
+                    for row_offset in (-1, 0, 1)
+                    for column_offset in (-1, 0, 1)
+                    if (row_offset != 0 or column_offset != 0)
+                    and grid[(row + row_offset) % ROWS][
+                        (column + column_offset) % COLUMNS
+                    ]
+                ]
+                updated_colors[row][column] = blend_colors(parent_colors)
+    return updated, updated_colors
+
+
+def draw_button(
+    screen: pygame.Surface,
+    font: pygame.font.Font,
+    text: str,
+    x: int,
+    mouse_position: tuple[int, int],
+) -> pygame.Rect:
+    rect = pygame.Rect(x, 42, 78, 34)
+    color = (
+        BUTTON_HOVER_COLOR
+        if rect.collidepoint(mouse_position)
+        else BUTTON_COLOR
+    )
+    pygame.draw.rect(screen, color, rect, border_radius=6)
+    label = font.render(text, True, TEXT_COLOR)
+    screen.blit(label, label.get_rect(center=rect.center))
+    return rect
+
+
+def draw_grid(
+    screen: pygame.Surface,
+    grid: list[list[bool]],
+    colors: ColorGrid,
+    font: pygame.font.Font,
+    small_font: pygame.font.Font,
+    running: bool,
+    generation: int,
+    interval: float,
+    cell_color: tuple[int, int, int],
+    symmetry_enabled: bool,
+) -> list[tuple[pygame.Rect, str]]:
+    screen.fill(BACKGROUND)
+    pygame.draw.rect(
+        screen,
+        HEADER_BACKGROUND,
+        (0, 0, WINDOW_WIDTH, HEADER_HEIGHT),
+    )
+    screen.blit(font.render("GAME OF LIFE", True, TEXT_COLOR), (16, 10))
+
+    mouse_position = pygame.mouse.get_pos()
+    button_specs = (
+        ("Pause" if running else "Start", "toggle"),
+        ("Step", "step"),
+        ("Random", "random"),
+        ("Clear", "clear"),
+        ("Reset", "reset"),
+        ("Save", "save"),
+        ("Open", "load"),
+        ("Color", "color"),
+        ("Slower", "slower"),
+        ("Faster", "faster"),
+        ("Symmetr.", "symmetry"),
+    )
+    buttons = []
+    for index, (label, action) in enumerate(button_specs):
+        rect = draw_button(
+            screen,
+            small_font,
+            label,
+            16 + index * 82,
+            mouse_position,
+        )
+        buttons.append((rect, action))
+
+    speed = round(1 / interval)
+    status = f"Generation {generation}"
+    screen.blit(small_font.render(status, True, TEXT_COLOR), (842, 10))
+    screen.blit(
+        small_font.render(
+            f"{speed} generations/s  |  Space: pause  N: step  Esc: quit",
+            True,
+            MUTED_COLOR,
+        ),
+        (16, 78),
+    )
+    screen.blit(
+        small_font.render(
+            "Drag left mouse: draw  |  Right click: erase",
+            True,
+            MUTED_COLOR,
+        ),
+        (390, 78),
+    )
+    pygame.draw.rect(screen, cell_color, (920, 47, 24, 24), border_radius=4)
+    symmetry_status = (
+        "Symmetry enabled" if symmetry_enabled else "Symmetry disabled"
+    )
+    screen.blit(
+        small_font.render(symmetry_status, True, MUTED_COLOR),
+        (842, 78),
+    )
+
+    for row in range(ROWS):
+        for column in range(COLUMNS):
+            if grid[row][column]:
+                pygame.draw.rect(
+                    screen,
+                    colors[row][column] or cell_color,
+                    (
+                        column * CELL_SIZE + 1,
+                        HEADER_HEIGHT + row * CELL_SIZE + 1,
+                        CELL_SIZE - 2,
+                        CELL_SIZE - 2,
+                    ),
+                    border_radius=4,
+                )
+
+    for column in range(COLUMNS + 1):
+        x = column * CELL_SIZE
+        pygame.draw.line(
+            screen, GRID_COLOR, (x, HEADER_HEIGHT), (x, WINDOW_HEIGHT)
+        )
+    for row in range(ROWS + 1):
+        y = HEADER_HEIGHT + row * CELL_SIZE
+        pygame.draw.line(screen, GRID_COLOR, (0, y), (WINDOW_WIDTH, y))
+
+    return buttons
+
+
+def main() -> None:
+    pygame.init()
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("Game of Life")
+    font = pygame.font.Font(None, 28)
+    small_font = pygame.font.Font(None, 21)
+    clock = pygame.time.Clock()
+
+    grid = create_grid()
+    colors: ColorGrid = [[None for _ in range(COLUMNS)] for _ in range(ROWS)]
+    initial_grid = [row[:] for row in grid]
+    initial_colors = [row[:] for row in colors]
+    cell_color = CELL_COLOR
+    running = False
+    generation = 0
+    interval = 0.2
+    elapsed = 0.0
+    symmetry_enabled = False
+    buttons = []
+    painting_value: Optional[bool] = None
+
+    def paint_cell(position: tuple[int, int], value: bool) -> None:
+        nonlocal initial_grid, initial_colors
+        if position[1] < HEADER_HEIGHT or position[0] >= WINDOW_WIDTH:
+            return
+        column = position[0] // CELL_SIZE
+        row = (position[1] - HEADER_HEIGHT) // CELL_SIZE
+        if not (0 <= row < ROWS and 0 <= column < COLUMNS):
+            return
+        affected_cells = (
+            mirrored_cells(row, column)
+            if symmetry_enabled
+            else ((row, column),)
+        )
+        for affected_row, affected_column in affected_cells:
+            grid[affected_row][affected_column] = value
+            colors[affected_row][affected_column] = (
+                cell_color if value else None
+            )
+        if not running and generation == 0:
+            initial_grid = [grid_row[:] for grid_row in grid]
+            initial_colors = [color_row[:] for color_row in colors]
+
+    while True:
+        elapsed += min(clock.tick(60) / 1000, 0.25)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+                if event.key == pygame.K_SPACE:
+                    running = not running
+                elif event.key == pygame.K_n and not running:
+                    grid, colors = next_colored_generation(grid, colors)
+                    generation += 1
+                elif event.key == pygame.K_c:
+                    grid = create_grid()
+                    colors = [[None for _ in range(COLUMNS)] for _ in range(ROWS)]
+                    generation = 0
+                elif event.key == pygame.K_r:
+                    grid = [
+                        [random.random() < 0.22 for _ in range(COLUMNS)]
+                        for _ in range(ROWS)
+                    ]
+                    colors = [
+                        [cell_color if alive else None for alive in row]
+                        for row in grid
+                    ]
+                    initial_grid = [row[:] for row in grid]
+                    initial_colors = [row[:] for row in colors]
+                    generation = 0
+                elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_UP):
+                    interval = max(0.05, interval - 0.05)
+                elif event.key in (pygame.K_MINUS, pygame.K_DOWN):
+                    interval = min(1.0, interval + 0.05)
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if event.pos[1] >= HEADER_HEIGHT:
+                    column = event.pos[0] // CELL_SIZE
+                    row = (event.pos[1] - HEADER_HEIGHT) // CELL_SIZE
+                    if 0 <= row < ROWS and 0 <= column < COLUMNS:
+                        painting_value = True
+                        paint_cell(event.pos, True)
+                else:
+                    for rect, action in buttons:
+                        if rect.collidepoint(event.pos):
+                            if action == "toggle":
+                                running = not running
+                            elif action == "step" and not running:
+                                grid, colors = next_colored_generation(
+                                    grid, colors
+                                )
+                                generation += 1
+                            elif action == "random":
+                                grid = [
+                                    [
+                                        random.random() < 0.22
+                                        for _ in range(COLUMNS)
+                                    ]
+                                    for _ in range(ROWS)
+                                ]
+                                colors = [
+                                    [
+                                        cell_color if alive else None
+                                        for alive in row
+                                    ]
+                                    for row in grid
+                                ]
+                                initial_grid = [row[:] for row in grid]
+                                initial_colors = [row[:] for row in colors]
+                                generation = 0
+                            elif action == "clear":
+                                grid = create_grid()
+                                colors = [
+                                    [None for _ in range(COLUMNS)]
+                                    for _ in range(ROWS)
+                                ]
+                                generation = 0
+                            elif action == "reset":
+                                grid = [row[:] for row in initial_grid]
+                                colors = [row[:] for row in initial_colors]
+                                running = False
+                                generation = 0
+                                elapsed = 0.0
+                            elif action == "save":
+                                name = ask_for_drawing_name(
+                                    "Save drawing",
+                                    "Enter the drawing name:",
+                                )
+                                if name and name.strip():
+                                    name = name.strip()
+                                    try:
+                                        drawings = read_drawings()
+                                        if name in drawings:
+                                            root = tk.Tk()
+                                            root.withdraw()
+                                            try:
+                                                overwrite = messagebox.askyesno(
+                                                    "Overwrite drawing?",
+                                                    f"The drawing '{name}' already exists. Overwrite it?",
+                                                    parent=root,
+                                                )
+                                            finally:
+                                                root.destroy()
+                                        else:
+                                            overwrite = True
+                                        if overwrite:
+                                            drawings[name] = (
+                                                [row[:] for row in grid],
+                                                [row[:] for row in colors],
+                                            )
+                                            write_drawings(drawings)
+                                            root = tk.Tk()
+                                            root.withdraw()
+                                            try:
+                                                messagebox.showinfo(
+                                                    "Drawing saved",
+                                                    f"The drawing '{name}' was saved.",
+                                                    parent=root,
+                                                )
+                                            finally:
+                                                root.destroy()
+                                    except (OSError, ValueError) as error:
+                                        show_error(
+                                            f"Failed to save drawing: {error}"
+                                        )
+                            elif action == "load":
+                                try:
+                                    drawings = read_drawings()
+                                    if not drawings:
+                                        show_error("There are no saved drawings.")
+                                    else:
+                                        names = "\n".join(sorted(drawings))
+                                        name = ask_for_drawing_name(
+                                            "Load drawing",
+                                            f"Saved drawings:\n{names}\n\nEnter the drawing name to load:",
+                                        )
+                                        if name and name.strip():
+                                            name = name.strip()
+                                            if name not in drawings:
+                                                show_error(
+                                                    f"The drawing '{name}' was not found."
+                                                )
+                                            else:
+                                                grid, colors = drawings[name]
+                                                grid = [row[:] for row in grid]
+                                                colors = [
+                                                    row[:] for row in colors
+                                                ]
+                                                initial_grid = [
+                                                    row[:] for row in grid
+                                                ]
+                                                initial_colors = [
+                                                    row[:] for row in colors
+                                                ]
+                                                running = False
+                                                generation = 0
+                                                elapsed = 0.0
+                                except (OSError, ValueError) as error:
+                                    show_error(
+                                        f"Failed to load drawings: {error}"
+                                    )
+                            elif action == "color":
+                                root = tk.Tk()
+                                root.withdraw()
+                                try:
+                                    rgb_color, _ = colorchooser.askcolor(
+                                        color=cell_color,
+                                        title="Choose a cell color",
+                                        parent=root,
+                                    )
+                                finally:
+                                    root.destroy()
+                                if rgb_color is not None:
+                                    cell_color = tuple(
+                                        int(channel) for channel in rgb_color
+                                    )
+                            elif action == "slower":
+                                interval = min(1.0, interval + 0.05)
+                            elif action == "faster":
+                                interval = max(0.05, interval - 0.05)
+                            elif action == "symmetry":
+                                symmetry_enabled = not symmetry_enabled
+                            break
+            elif event.type == pygame.MOUSEMOTION and event.buttons[0]:
+                if painting_value is not None:
+                    paint_cell(event.pos, painting_value)
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                painting_value = None
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                paint_cell(event.pos, False)
+
+        if running:
+            while elapsed >= interval:
+                grid, colors = next_colored_generation(grid, colors)
+                generation += 1
+                elapsed -= interval
+        else:
+            elapsed = 0.0
+
+        buttons = draw_grid(
+            screen,
+            grid,
+            colors,
+            font,
+            small_font,
+            running,
+            generation,
+            interval,
+            cell_color,
+            symmetry_enabled,
+        )
+        pygame.display.flip()
+
+
+if __name__ == "__main__":
+    main()
