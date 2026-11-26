@@ -145,7 +145,7 @@ def solve(maze: Maze, breadth_first: bool) -> SearchResult:
 
 
 def generate_maze(height: int = 71, width: int = 105) -> Maze:
-    """Izveido sarežģītu, savienotu labirintu ar dažiem alternatīviem ceļiem."""
+    """Izveido sarežģītu labirintu ar daudziem strupceļiem un alternatīviem ceļiem."""
     height = max(7, height if height % 2 else height + 1)
     width = max(7, width if width % 2 else width + 1)
     cells = [["#" for _ in range(width)] for _ in range(height)]
@@ -172,7 +172,7 @@ def generate_maze(height: int = 71, width: int = 105) -> Maze:
 
     for row in range(1, height - 1):
         for column in range(1, width - 1):
-            if cells[row][column] != "#" or random.random() >= 0.12:
+            if cells[row][column] != "#" or random.random() >= 0.03:
                 continue
             vertical_open = (
                 cells[row - 1][column] != "#" and cells[row + 1][column] != "#"

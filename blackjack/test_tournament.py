@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from .tournament import BotPlayer, hand_value, is_natural, make_shoe
+from .tournament import BotPlayer, find_text_matches, hand_value, is_natural, make_shoe
 
 
 class HandValueTests(unittest.TestCase):
@@ -23,6 +23,18 @@ class HandValueTests(unittest.TestCase):
         shoe = make_shoe(2)
         self.assertEqual(len(shoe), 104)
         self.assertEqual(shoe.count("TH"), 2)
+
+
+class SearchTests(unittest.TestCase):
+    def test_search_is_case_insensitive_and_finds_all_matches(self):
+        self.assertEqual(
+            find_text_matches("Bet 10\nbet 20", "BET"),
+            [(0, 3), (7, 10)],
+        )
+
+    def test_empty_or_missing_query_has_no_matches(self):
+        self.assertEqual(find_text_matches("Round 1", ""), [])
+        self.assertEqual(find_text_matches("Round 1", "winner"), [])
 
 
 class RoundTests(unittest.TestCase):

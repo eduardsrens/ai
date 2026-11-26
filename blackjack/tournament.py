@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import random
+import re
 import sys
 import time
 import tkinter as tk
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -47,6 +50,28 @@ def make_shoe(deck_count: int) -> list[str]:
     shoe = [rank + suit for _ in range(deck_count) for suit in SUITS for rank in RANKS]
     random.shuffle(shoe)
     return shoe
+
+
+def find_text_matches(text: str, query: str) -> list[tuple[int, int]]:
+    if not query:
+        return []
+    return [
+        match.span()
+        for match in re.finditer(re.escape(query), text, flags=re.IGNORECASE)
+    ]
+
+
+def run_with_timeout(func, *args):
+    """Izsauc bota funkciju ar dziļajām kopijām un nebloķējošu taimautu."""
+    safe_args = [copy.deepcopy(arg) for arg in args]
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(func, *safe_args)
+    try:
+        return future.result(timeout=BOT_TIME_LIMIT)
+    except FuturesTimeoutError as exc:
+        raise TimeoutError(f"pārsniedza {BOT_TIME_LIMIT:.1f} s laika limitu") from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 @dataclass
@@ -91,7 +116,7 @@ class BlackjackTournament:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Blackjack botu turnīrs")
-        self.root.minsize(900, 680)
+        self.root.minsize(920, 700)
         self.root.configure(bg="#e8eef2")
 
         self.bots, load_errors = load_bots()
@@ -105,8 +130,13 @@ class BlackjackTournament:
         self.auto_running = False
         self.after_id = None
         self.log_lines = []
+        self.search_matches = []
+        self.search_match_index = -1
+        self.search_query = None
 
         self._build_ui()
+        self.root.bind_all("<Control-f>", self.focus_log_search)
+        self.root.bind_all("<Control-F>", self.focus_log_search)
         self._refresh_scoreboard()
         self._draw_table()
         if load_errors:
@@ -171,13 +201,14 @@ class BlackjackTournament:
         table_frame = ttk.Frame(self.root)
         table_frame.pack(fill="both", expand=True, padx=10, pady=5)
         self.table = tk.Canvas(
-            table_frame, height=260, bg="#176b45", highlightthickness=1,
+            table_frame, height=280, bg="#176b45", highlightthickness=1,
             highlightbackground="#0c432b", yscrollincrement=24,
         )
         table_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=table_scroll.set)
         self.table.pack(side="left", fill="both", expand=True)
         table_scroll.pack(side="right", fill="y")
+        self.table.bind("<Configure>", lambda _e: self._draw_table())
 
         lower = ttk.Panedwindow(self.root, orient="horizontal")
         lower.pack(fill="both", expand=True, padx=10, pady=(4, 10))
@@ -194,8 +225,31 @@ class BlackjackTournament:
 
         log_frame = ttk.LabelFrame(lower, text="Turnīra notikumi", padding=5)
         lower.add(log_frame, weight=2)
-        self.log_text = tk.Text(log_frame, height=8, width=48, state="disabled", wrap="word")
-        self.log_text.pack(fill="both", expand=True)
+        search_controls = ttk.Frame(log_frame)
+        search_controls.pack(fill="x", pady=(0, 4))
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(search_controls, textvariable=self.search_var)
+        self.search_entry.pack(side="left", fill="x", expand=True)
+        self.search_entry.bind("<Return>", lambda _event: self.search_log(1))
+        self.search_entry.bind("<Shift-Return>", lambda _event: self.search_log(-1))
+        ttk.Button(
+            search_controls, text="Iepr.", command=lambda: self.search_log(-1), width=5
+        ).pack(side="left", padx=(4, 0))
+        ttk.Button(
+            search_controls, text="Tālāk", command=lambda: self.search_log(1), width=6
+        ).pack(side="left", padx=(4, 0))
+        self.search_status_var = tk.StringVar()
+        ttk.Label(log_frame, textvariable=self.search_status_var).pack(anchor="w")
+
+        log_text_frame = ttk.Frame(log_frame)
+        log_text_frame.pack(fill="both", expand=True)
+        self.log_text = tk.Text(log_text_frame, height=8, width=48, state="disabled", wrap="word")
+        log_scroll = ttk.Scrollbar(log_text_frame, orient="vertical", command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scroll.set)
+        self.log_text.tag_configure("search_match", background="#fff2a8")
+        self.log_text.tag_configure("current_match", background="#ffad66")
+        self.log_text.pack(side="left", fill="both", expand=True)
+        log_scroll.pack(side="right", fill="y")
 
     def _read_settings(self) -> dict:
         try:
@@ -269,9 +323,12 @@ class BlackjackTournament:
                 continue
             max_allowed = min(200, int(bot.bankroll))
             try:
-                started = time.monotonic()
-                bet = bot.module.place_bet(int(bot.bankroll), list(self.history), len(self.shoe) / 52)
-                self._check_bot_time(started, bot, "place_bet")
+                bet = run_with_timeout(
+                    bot.module.place_bet,
+                    int(bot.bankroll),
+                    self.history,
+                    len(self.shoe) / 52,
+                )
                 if isinstance(bet, bool) or not isinstance(bet, int):
                     raise ValueError(f"place_bet atgrieza ne-veselu likmi: {bet!r}")
                 bet = max(10, min(max_allowed, bet))
@@ -307,13 +364,6 @@ class BlackjackTournament:
             self.history.append(card)
         return card
 
-    def _check_bot_time(self, started: float, bot: BotPlayer, function: str):
-        elapsed = time.monotonic() - started
-        if elapsed > BOT_TIME_LIMIT:
-            raise TimeoutError(
-                f"{bot.name}.{function} aizņēma {elapsed:.2f} s (limits 0.5 s)"
-            )
-
     def _play_all_bots(self, active: list[BotPlayer]):
         for bot in active:
             hand_index = 0
@@ -337,15 +387,14 @@ class BlackjackTournament:
                     )
                     can_split = pair and not hand["split_used"] and bot.bankroll >= hand["bet"]
                     try:
-                        started = time.monotonic()
-                        action = bot.module.decide_action(
-                            list(hand["cards"]),
+                        action = run_with_timeout(
+                            bot.module.decide_action,
+                            hand["cards"],
                             self.dealer_hand[0],
-                            list(self.history),
+                            self.history,
                             can_double,
                             can_split,
                         )
-                        self._check_bot_time(started, bot, "decide_action")
                         if action not in {"HIT", "STAND", "DOUBLE", "SPLIT"}:
                             raise ValueError(f"neatļauta darbība: {action!r}")
                         if action == "DOUBLE" and not can_double:
@@ -545,33 +594,40 @@ class BlackjackTournament:
         self.table.create_text(width // 2, 145, text=f"Punkti: {dealer_score}", fill="white", font=("Segoe UI", 10))
 
         count = max(1, len(self.bots))
-        columns = max(1, min(count, width // 190))
+        columns = max(1, min(count, width // 210))
         cell_width = width // columns
         for index, bot in enumerate(self.bots):
             row, column = divmod(index, columns)
             x = column * cell_width + cell_width // 2
-            y = 185 + row * 150
+            y = 185 + row * 165
             label = f"{bot.name}  |  {self._format_chips(bot.bankroll)} čipi"
             self.table.create_text(x, y, text=label, fill="white", font=("Segoe UI", 10, "bold"))
-            cards = []
-            if bot.hands:
-                for hand in bot.hands:
-                    cards.append((hand["cards"], hand["bet"]))
-            offset = 0
-            for hand_cards, bet in cards:
-                self._draw_cards(x - 70 + offset, y + 15, hand_cards, small=True)
-                self.table.create_text(
-                    x - 25 + offset, y + 103,
-                    text=f"{hand_value(hand_cards)} p. | likme {bet}",
-                    fill="white", font=("Segoe UI", 9),
-                )
-                offset += min(150, cell_width // max(1, len(cards)))
+            cards = [(hand["cards"], hand["bet"]) for hand in bot.hands]
+            if len(cards) <= 1:
+                for hand_cards, bet in cards:
+                    self._draw_cards(x - 65, y + 15, hand_cards, small=True)
+                    self.table.create_text(
+                        x, y + 103,
+                        text=f"{hand_value(hand_cards)} p. | likme {bet}",
+                        fill="white", font=("Segoe UI", 9),
+                    )
+            else:
+                # Kompaktāks attēlojums, ja bots ir veicis SPLIT (2 rokas blakus)
+                half = cell_width // 4
+                for h_idx, (hand_cards, bet) in enumerate(cards):
+                    hx = x - half if h_idx == 0 else x + half
+                    self._draw_cards(hx - 48, y + 15, hand_cards, small=True, compact=True)
+                    self.table.create_text(
+                        hx, y + 103,
+                        text=f"{hand_value(hand_cards)}p ({bet})",
+                        fill="white", font=("Segoe UI", 8),
+                    )
         self.table.configure(scrollregion=self.table.bbox("all"))
 
-    def _draw_cards(self, x, y, cards, small=False):
-        card_width = 48 if small else 58
-        card_height = 68 if small else 82
-        gap = 7
+    def _draw_cards(self, x, y, cards, small=False, compact=False):
+        card_width = 40 if compact else (48 if small else 58)
+        card_height = 60 if compact else (68 if small else 82)
+        gap = 3 if compact else (6 if small else 7)
         for index, card in enumerate(cards):
             left = x + index * (card_width + gap)
             if card is None:
@@ -590,7 +646,7 @@ class BlackjackTournament:
             self.table.create_text(
                 left + card_width / 2, y + card_height / 2,
                 text=f"{card[:-1]}\n{SUIT_NAMES[suit]}",
-                fill=color, font=("Segoe UI", 12 if small else 14, "bold"),
+                fill=color, font=("Segoe UI", 11 if compact else (12 if small else 14), "bold"),
             )
 
     def _log(self, line: str):
@@ -603,6 +659,48 @@ class BlackjackTournament:
         self.log_text.insert("end", "\n".join(self.log_lines) + "\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
+        self.search_matches = []
+        self.search_match_index = -1
+        self.search_query = None
+        self.search_status_var.set("")
+
+    def focus_log_search(self, _event=None):
+        self.search_entry.focus_set()
+        self.search_entry.selection_range(0, "end")
+        return "break"
+
+    def search_log(self, direction: int = 1):
+        query = self.search_var.get()
+        if query != self.search_query:
+            self.search_query = query
+            text = self.log_text.get("1.0", "end-1c")
+            self.search_matches = find_text_matches(text, query)
+            self.search_match_index = -1 if direction > 0 else 0
+
+        self.log_text.tag_remove("current_match", "1.0", "end")
+        self.log_text.tag_remove("search_match", "1.0", "end")
+        if not self.search_matches:
+            self.search_status_var.set("Nav atrasts" if query else "")
+            return
+
+        self.search_match_index = (
+            self.search_match_index + direction
+        ) % len(self.search_matches)
+        for start, end in self.search_matches:
+            self.log_text.tag_add(
+                "search_match",
+                self.log_text.index(f"1.0+{start}c"),
+                self.log_text.index(f"1.0+{end}c"),
+            )
+        start, end = self.search_matches[self.search_match_index]
+        start_index = self.log_text.index(f"1.0+{start}c")
+        end_index = self.log_text.index(f"1.0+{end}c")
+        self.log_text.tag_add("current_match", start_index, end_index)
+        self.log_text.tag_raise("current_match")
+        self.log_text.see(start_index)
+        self.search_status_var.set(
+            f"{self.search_match_index + 1}/{len(self.search_matches)}"
+        )
 
     def _set_status(self, text: str):
         self.status_var.set(text)

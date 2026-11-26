@@ -18,6 +18,10 @@ sāktu manuāli ar pogu **Nākamā partija**, vai **Sākt auto**, lai turpinātu
 partijas automātiski. Atzīme **Automātisks dīleris** liek dīlerim vilkt līdz
 17 punktiem; ja tā nav atzīmēta, dīlera kārtis vada lietotājs.
 
+Turnīra notikumu vēsturē var meklēt tekstu, nešķirojot lielos un mazos burtus.
+Spiediet **Ctrl+F**, ievadiet meklējamo tekstu un izmantojiet **Iepr.**/**Tālāk**,
+lai pārvietotos starp atrastajiem rezultātiem.
+
 Rezultātā uzvar bots ar lielāko čipu skaitu pēc norādītā partiju skaita.
 Botu izsaukumu izpildes laiku pārbauda pēc atgriešanās; pārsnieguma gadījumā
 turnīrs reģistrē kļūdu un izmanto minimālo likmi vai apstājas pie gājiena.

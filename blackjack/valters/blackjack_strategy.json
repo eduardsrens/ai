@@ -1,0 +1,6 @@
+{
+  "bet_trigger": 2,
+  "max_bet_units": 3,
+  "deviation_threshold": 2,
+  "split_tens_threshold": 99
+}
