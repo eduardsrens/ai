@@ -10,6 +10,22 @@ RUNNING ON WINDOWS
 3. Double-click "Play Game.bat" or run `py -3 game_of_life.py`.
 4. On the start screen, choose Singleplayer or Multiplayer.
 
+BLACKJACK
+---------
+Double-click "Play Blackjack.bat". The game uses four decks and shuffles them
+after 52 cards have been dealt. Start with 1,000 tokens. The bot plays
+automatically, without gameplay clicks, and continues indefinitely: when the
+balance runs out, it refills to 1,000 and starts a fresh shoe while preserving
+the win/loss statistics. It moves with short 50 ms pauses and waits 100 ms
+between rounds. It varies its wager from 5 to 25 tokens based on the Hi-Lo true
+count and calculates exact remaining-shoe EV for hit, stand, and double; pair
+splitting follows standard basic strategy. The dealer's hidden card is modeled
+probabilistically.
+Playing cards are drawn with rank and suit markings. Blackjack pays 3:2 and
+pushes return the wager. The game uses Tkinter and requires no additional
+packages. A Windows icon is optional and is loaded only when `blackjack.ico`
+is placed beside the source file.
+
 The game code, including multiplayer and robot modes, is all in one file:
 `game_of_life.py`.
 

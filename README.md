@@ -1,10 +1,11 @@
 # AI kursa projekti
 
-Šajā repozitorijā ir trīs Python projektu grupas:
+Šajā repozitorijā ir četras Python projektu grupas:
 
 1. [Labirinti](#labirinti)
 2. [Tic-Tac-Toe ar Swap2](#tic-tac-toe-ar-swap2)
-3. [Game of Life un Pocket Party](#game-of-life-un-pocket-party)
+3. [Blackjack ar kāršu skaitīšanas botu](#blackjack-ar-kāršu-skaitīšanas-botu)
+4. [Game of Life un Pocket Party](#game-of-life-un-pocket-party)
 
 ## Labirinti
 
@@ -69,6 +70,25 @@ Tests:
 
 ```powershell
 python -m unittest tic-tac-toe/test_game.py -v
+```
+
+## Blackjack ar kāršu skaitīšanas botu
+
+[`blackjack/Undine/blackjack.py`](blackjack/Undine/blackjack.py) ir Tkinter Blackjack
+spēle ar četrām kavām, kuras sajauc pēc 52 izspēlētām kārtīm. Spēlētājs sāk ar 1000
+žetoniem. Bots spēlē automātiski un turpina arī pēc žetonu iztērēšanas: bilance tiek
+papildināta līdz 1000, tiek sajaukta jauna kava, un uzvaru/zaudējumu statistika
+saglabājas. Gājieni seko ar īsām pauzēm (50 ms starp botu darbībām un 100 ms starp
+partijām). Bots liek 5–25 žetonus atkarībā no Hi-Lo patiesā skaita un precīzi
+aprēķina atlikušās kavas EV ņemšanai, palikšanai un dubultošanai; pāru dalīšanai
+izmanto standarta pamatstratēģiju. Dīlera aizklātā kārts tiek varbūtiski modelēta.
+Kārtis attēlotas ar mastīm un kāršu zīmējumu. Spēlei ir palaišanas fails
+[`Play Blackjack.bat`](game-of-life/zane/Play%20Blackjack.bat).
+
+```powershell
+$env:PYTHONPATH = "blackjack\Undine"
+python blackjack\Undine\blackjack.py
+python -m unittest discover -s game-of-life\zane -p test_blackjack.py -v
 ```
 
 ## Game of Life un Pocket Party
